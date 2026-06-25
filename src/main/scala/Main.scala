@@ -166,9 +166,8 @@ object Main {
   private def rewriteProofAxiomIfNotEqToInputProb(
       dag: ProofDag.Dag,
       nodeName: String,
-      problemFormulas: Seq[TPTP.AnnotatedFormula],
-      leanFormulasByNodeName: Map[String, String]
-  ): (ProofDag.Dag, Map[String, String]) = {
+      problemFormulas: Seq[TPTP.AnnotatedFormula]
+  ): ProofDag.Dag = {
     val node = dag.nodes(nodeName)
     val problemFormulaName = AnnotationInformationHelpers.fileParentInformation(node.additionalInfo) match {
       case Some(FileInformation(_, name)) => name
@@ -178,7 +177,7 @@ object Main {
     val problemFormula = problemFormulas.find(_.name == problemFormulaName)
     val isSyntacticallyEqual = problemFormula.exists(formulasAreSyntacticallyEqual(node.formula, _))
     if (isSyntacticallyEqual) {
-      (dag, leanFormulasByNodeName)
+      dag
     } else {
       Logger.println("Syntactic mismatch found for axiom node " + nodeName)
       val replacementNodeName = nodeName + "_inputTransf"
@@ -218,8 +217,7 @@ object Main {
       val updatedDag = ProofDag.Dag(updatedNodes)
       Logger.println(s"Adding node: ${replacementNodeName} -> ${nodeName} to list")
       //Logger.println(s"leanFormulasByNodeName: ${leanFormulasByNodeName.keys.mkString(", ")}")
-      val updatedLeanFormulas = leanFormulasByNodeName + (replacementNodeName -> leanFormulasByNodeName(nodeName)) - nodeName
-      (updatedDag, updatedLeanFormulas)
+      updatedDag
     }
   }
   
@@ -238,9 +236,8 @@ object Main {
   private def rewriteNegatedConjectureIfNotEqToSyntacticNeg(
       dag: ProofDag.Dag,
       nodeName: String,
-      problemFormulas: Seq[TPTP.AnnotatedFormula],
-      leanFormulasByNodeName: Map[String, String]
-  ): (ProofDag.Dag, Map[String, String]) = {
+      problemFormulas: Seq[TPTP.AnnotatedFormula]
+  ): ProofDag.Dag = {
     val node = dag.nodes(nodeName)
     val parentNames = node.parents
 
@@ -258,7 +255,7 @@ object Main {
     }
 
     if (isSyntacticNegation) {
-      (dag, leanFormulasByNodeName)
+      dag
     } else {
 
       additionalProofObligations :+= TPTPProblemGenerator.Inference("rev_obligation_neg_"+node.name,
@@ -288,37 +285,31 @@ object Main {
       updatedNodes = updatedNodes.updated(parentName, updatedNodes(parentName).copy(formula = rewrittenParentFormula))
       updatedNodes = updatedNodes + (replacementNodeName -> replacementNode)
 
-      val updatedDag = ProofDag.Dag(updatedNodes)
-      val updatedLeanFormulas = leanFormulasByNodeName + (replacementNodeName -> leanFormulasByNodeName(parentName)) - node.name
-      (updatedDag, updatedLeanFormulas)
+      ProofDag.Dag(updatedNodes)
     }
   }
 
   private def addInferencesIfSyntacticMismatch(
       dag: ProofDag.Dag,
       problemFormulas: Seq[TPTP.AnnotatedFormula],
-      leanFormulasByNodeName: Map[String, String],
       allowSyntacticMismatchOfAxioms: Boolean
-  ): (ProofDag.Dag, Map[String, String]) = {
+  ): ProofDag.Dag = {
     var currentDag = dag
-    var currentLeanFormulasByNodeName = leanFormulasByNodeName
     if(allowSyntacticMismatchOfAxioms)
     {
-      val (updatedDag, updatedLeanFormulas) = currentDag.axioms.foldLeft((currentDag, currentLeanFormulasByNodeName)) {
-        case ((currentDag, currentLeanFormulas), nodeName) =>
-          rewriteProofAxiomIfNotEqToInputProb(currentDag, nodeName, problemFormulas, currentLeanFormulas)
+      val (updatedDag) = currentDag.axioms.foldLeft(currentDag) {
+        case (currentDag, nodeName) =>
+          rewriteProofAxiomIfNotEqToInputProb(currentDag, nodeName, problemFormulas)
       }
       currentDag = updatedDag
-      currentLeanFormulasByNodeName = updatedLeanFormulas
     }
 
-    val (updatedDag, updatedLeanFormulas) = currentDag.countersatisfiable.foldLeft((currentDag, currentLeanFormulasByNodeName)) {
-      case ((currentDag, currentLeanFormulas), nodeName) =>
-        rewriteNegatedConjectureIfNotEqToSyntacticNeg(currentDag, nodeName, problemFormulas, currentLeanFormulas)
+    val (updatedDag) = currentDag.countersatisfiable.foldLeft(currentDag) {
+      case (currentDag, nodeName) =>
+        rewriteNegatedConjectureIfNotEqToSyntacticNeg(currentDag, nodeName, problemFormulas)
     }
     currentDag = updatedDag
-    currentLeanFormulasByNodeName = updatedLeanFormulas
-    return (currentDag, currentLeanFormulasByNodeName)
+    return currentDag
   }
 
 
@@ -368,7 +359,6 @@ object Main {
       theoremCheckResults: Map[String, JobScheduler.ProcessResult],
       additionalObligationCheckResults: Map[String, JobScheduler.ProcessResult],
       dag: ProofDag.Dag,
-      leanFormulasByProblemNodeName: Map[String, String],
       introducedVariables : Map[String, Int] = Map.empty,
       usedParents: Map[String, Seq[String]] = Map.empty,
   ): Unit = {
@@ -395,7 +385,7 @@ object Main {
         writer.write("end " + node + "\n")
       }
       
-      LeanFullProofPrinter.writeFullProof(writer, dag, leanFormulasByProblemNodeName, usedParents)
+      LeanFullProofPrinter.writeFullProof(writer, dag, usedParents)
       
     } finally {
       writer.close()
@@ -468,26 +458,23 @@ object Main {
       val skolemFunctionArities = SkolemizationGeneration.checkSkolemizationDetailsAreConsistent(dag)
       Logger.println(skolemFunctionArities)
       val translationResult = Await.result(translationResultsFuture, scala.concurrent.duration.Duration.Inf)
-      Logger.println("Parsing translation result...")
-      Logger.println(translationResult.map(_.stdout).mkString("\n\n"))
-      var leanFormulasByProblemNodeName : Map[String, String] = Map.empty
+      //Logger.println("Parsing translation result...")
+      //Logger.println(translationResult.map(_.stdout).mkString("\n\n"))
+      //var leanFormulasByProblemNodeName : Map[String, String] = Map.empty
       var translatedVariables : String = ""
       for(result <- translationResult){
         val parsedTranslation = TranslationResult.parseTranslationResult(result.stdout)
         translatedVariables += parsedTranslation.variableDeclarations + "\n"
-        leanFormulasByProblemNodeName ++= parsedTranslation.formulasByName
       }
 
-      var leanFormulasByNodeName = leanFormulasByProblemNodeName.map { case (nodeName, formula) =>
-        var axiomNameInProof = problemFileToProofFileNames.getOrElse(nodeName, nodeName)
-        (axiomNameInProof, formula)
-      }.toMap
-      
+      //var leanFormulasByNodeName = leanFormulasByProblemNodeName.map { case (nodeName, formula) =>
+      //  var axiomNameInProof = problemFileToProofFileNames.getOrElse(nodeName, nodeName)
+      //  (axiomNameInProof, formula)
+      //}.toMap
+
       
       Logger.println("Checking for syntactic mismatches between proof DAG and input problem...")
-      val normalizedDag = addInferencesIfSyntacticMismatch(dag, problemFormulas, leanFormulasByNodeName, config.allowSyntacticMismatchOfAxioms)
-      dag = normalizedDag._1
-      leanFormulasByNodeName = normalizedDag._2
+      dag = addInferencesIfSyntacticMismatch(dag, problemFormulas, config.allowSyntacticMismatchOfAxioms)
 
       //Logger.println("Lean formulas by node name:", verbosity = Logger.VERBOSITY_HIGH)
       //Logger.println(leanFormulasByNodeName.keys.mkString(", "), verbosity = Logger.VERBOSITY_HIGH)
@@ -550,7 +537,7 @@ object Main {
       
       writeLeanOutputFile(outputFile, translatedVariables,
                   theoremCheckResults, additionalObligationCheckResults, dag, 
-                  leanFormulasByNodeName, skolemFunctionArities, usedParents)
+                  skolemFunctionArities, usedParents)
       val leanCheckResult = runLeanCheck(outputFile)
       if(config.pathForLeanOutput.isEmpty){
         Files.delete(outputFile)

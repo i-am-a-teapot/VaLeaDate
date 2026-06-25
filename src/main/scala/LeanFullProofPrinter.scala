@@ -54,15 +54,10 @@ set_option maxRecDepth 100000000""")
   private def writeLeanSources(
       writer: PrintWriter,
       sources: Seq[String],
-      leanFormulasByNodeName: Map[String, String],
       dag: ProofDag.Dag
   ): Unit = {
     sources.foreach { sourceName =>
         writer.print(LeanPrettyPrinter.prettyLeanSyntax(dag.nodes(sourceName).formula))
-        //leanFormulasByNodeName.get(sourceName) match {
-        //  case Some(formula) => writer.print(formula)
-        //  case None => throw new ProofErrorException(s"No formula found for source node $sourceName in input formula map")
-        //}
         writer.print(" → ")
     }
   }
@@ -70,7 +65,6 @@ set_option maxRecDepth 100000000""")
   private def writeLeanConjecture(
       writer: PrintWriter,
       dag: ProofDag.Dag,
-      leanFormulasByNodeName: Map[String, String],
   ): Unit = {
     if (dag.conjectures.length > 1) {
       throw new IllegalArgumentException(s"Multiple conjecture nodes found in DAG: ${dag.conjectures.mkString(", ")}. Only one conjecture node is supported.")
@@ -81,21 +75,17 @@ set_option maxRecDepth 100000000""")
     } else {
       dag.conjectures.foreach { conjectureName =>
         writer.print(LeanPrettyPrinter.prettyLeanSyntax(dag.nodes(conjectureName).formula))
-        //leanFormulasByNodeName.get(conjectureName) match {
-        //  case Some(formula) => writer.print(formula)
-        //  case None => throw new ProofErrorException(s"No formula found for conjecture node $conjectureName in input formula map")
-        //}
       }
     }
   }
 
-  def writeFullProof(writer: PrintWriter, dag: ProofDag.Dag, leanFormulasByProblemNodeName: Map[String, String], usedParents: Map[String, Seq[String]]): Unit = {
+  def writeFullProof(writer: PrintWriter, dag: ProofDag.Dag, usedParents: Map[String, Seq[String]]): Unit = {
     writer.println("theorem fullFullProof : ")
 
     var containsConjectures = !dag.conjectures.isEmpty
     var sourcesToPrint = dag.sources.filter(sourceName => dag.nodes(sourceName).role == "axiom" || (!containsConjectures && dag.nodes(sourceName).role == "negated_conjecture"))
-    writeLeanSources(writer, sourcesToPrint, leanFormulasByProblemNodeName,dag)
-    writeLeanConjecture(writer, dag, leanFormulasByProblemNodeName)
+    writeLeanSources(writer, sourcesToPrint ,dag)
+    writeLeanConjecture(writer, dag)
     writer.println(" := by")
     writer.print("  intro ")
     sourcesToPrint.foreach { sourceName => writer.print("step_" + sourceName + " ") } 
