@@ -29,7 +29,8 @@ project/**/metals.sbt
 .vscode/
 
 Problems/
-project/
+project/**/.bloop/
+project/**/target/
 target/
 testVampireProofs/
 
