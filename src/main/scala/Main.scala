@@ -158,18 +158,29 @@ object Main {
     }
   }
 
-  private def loadAnnotatedFormulas(path: String, baseDir: String): Seq[TPTP.AnnotatedFormula] = {
+  private def loadAnnotatedFormulas(path: String, baseDir: String, settings: Settings): Seq[TPTP.AnnotatedFormula] = {
     var fullPath = Paths.get(path)
+    
     if(!fullPath.isAbsolute){
-      fullPath = Paths.get(baseDir, path)
+      val alternativePath = Paths.get(baseDir, path)
+      if(Files.exists(alternativePath) && Files.isRegularFile(alternativePath)){
+        fullPath = alternativePath
+      } else {
+        val alternativePath2 = Paths.get(settings.tptpDirectory, path)
+        if(Files.exists(alternativePath2) && Files.isRegularFile(alternativePath2)){
+          fullPath = alternativePath2
+        } else {
+          throw new IllegalArgumentException(s"Input file not found: $path, tried baseDir: $baseDir and TPTP directory: ${settings.tptpDirectory}")
+        }
+      }
     }
-    Logger.println(fullPath)
+
     val source = Source.fromFile(fullPath.toFile)
     var allFormulas = Seq.empty[TPTP.AnnotatedFormula]
     try {
       val problem = TPTPParser.problem(source)
       for(includes <- problem.includes){
-        var formulas = loadAnnotatedFormulas(includes._1, settings.tptpDirectory)
+        var formulas = loadAnnotatedFormulas(includes._1, baseDir, settings)
         allFormulas = allFormulas ++ formulas
       }
       allFormulas ++ problem.formulas
@@ -428,8 +439,10 @@ object Main {
     try {
       Logger.println(s"Reading input from: ${config.inputFile}")
       Logger.println("Parsing input proof file...")
-      val proofFormulas = loadAnnotatedFormulas(config.inputFile, "")
-      val proofFileBasePath = Paths.get(config.inputFile).getParent().toString()
+      val proofPath = Paths.get(config.inputFile)
+      val proofFileBasePath = proofPath.getParent.toAbsolutePath.toString
+      val proofFileName = proofPath.getFileName.toString
+      val proofFormulas = loadAnnotatedFormulas(proofFileName, proofFileBasePath, settings)
 
       Logger.println("Building proof DAG...")
       var dag = ProofDag.fromProof(proofFormulas, config.assumeThm, config.treatNegatedConjectureAsAxiom)
@@ -451,7 +464,7 @@ object Main {
       var translationJobs = Seq.empty[JobScheduler.JobSpec]
       if(problemFiles.nonEmpty){
         for(problemFile <- problemFiles){
-          var formulas = loadAnnotatedFormulas(problemFile, proofFileBasePath)
+          var formulas = loadAnnotatedFormulas(problemFile, proofFileBasePath, settings)
           problemFormulas = problemFormulas ++ formulas
           var translationJob = buildVampireJobSpec(problemFile, proofFileBasePath)
           translationJobs = translationJobs :+ translationJob
