@@ -1,0 +1,42 @@
+# Created by https://www.toptal.com/developers/gitignore/api/scala,git,metals
+# Edit at https://www.toptal.com/developers/gitignore?templates=scala,git,metals
+
+### Git ###
+# Created by git for backups. To disable backups in Git:
+# $ git config --global mergetool.keepBackup false
+*.orig
+
+# Created by git when using merge tools for conflicts
+*.BACKUP.*
+*.BASE.*
+*.LOCAL.*
+*.REMOTE.*
+*_BACKUP_*.txt
+*_BASE_*.txt
+*_LOCAL_*.txt
+*_REMOTE_*.txt
+
+### Metals ###
+.metals/
+.bloop/
+project/**/metals.sbt
+
+### Scala ###
+*.class
+*.log
+
+.github/
+.vscode/
+
+Problems/
+project/
+target/
+testVampireProofs/
+
+*.dot
+*.png
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+# End of https://www.toptal.com/developers/gitignore/api/scala,git,metals
