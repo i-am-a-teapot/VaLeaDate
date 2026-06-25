@@ -18,7 +18,8 @@ object Main {
   case class Settings(
     var vampireBinary : String = "",
     var leanLibraryPath : String = "",
-    var leanBinary: String = ""
+    var leanBinary: String = "",
+    var tptpDirectory : String = ""
   );
 
   case class Config(
@@ -30,6 +31,7 @@ object Main {
     leanBinary: String = "",
     vampireBinary: String = "",
     leanLibraryPath: String = "",
+    tptpDirectory: String = "",
     verifyWithLean: Boolean = true,
     pathForLeanOutput: Option[String] = None,
     assumeThm : Boolean = false,
@@ -46,6 +48,7 @@ object Main {
     settings.leanLibraryPath = scala.util.Properties.envOrElse("VAMPLEAN_PATH", "")
     settings.leanBinary = scala.util.Properties.envOrElse("LEAN_BINARY", "~/.elan/toolchains/leanprover--lean4---v4.29.0/bin/lean")
     settings.vampireBinary = scala.util.Properties.envOrElse("VAMPIRE_BINARY", "~/vampire/vampire")
+    settings.tptpDirectory = scala.util.Properties.envOrElse("TPTP", "~/TPTP-v9.2.1")
 
     val parser = {
       import builder._
@@ -92,6 +95,9 @@ object Main {
         opt[Unit]("allow-axiom-mismatch")
           .action((_, c) => c.copy(allowSyntacticMismatchOfAxioms = true))
           .text("allow syntactic mismatch of axioms between proof and input problem"),
+        opt[String]("tptp-directory")
+          .action((x, c) => c.copy(tptpDirectory = x))
+          .text("path to the TPTP directory"),
         opt[Int]('t', "timeout")
           .action((x, c) => c.copy(timeout = x))
           .text("timeout in seconds (default: 30)"),
@@ -105,11 +111,13 @@ object Main {
         if(config.leanBinary.nonEmpty) settings.leanBinary = config.leanBinary
         if(config.vampireBinary.nonEmpty) settings.vampireBinary = config.vampireBinary
         if(config.leanLibraryPath.nonEmpty) settings.leanLibraryPath = config.leanLibraryPath
+        if(config.tptpDirectory.nonEmpty) settings.tptpDirectory = config.tptpDirectory
         val timeout = config.timeout.seconds
         val watcher = new Timer(true)
         watcher.schedule(new TimerTask {
           def run(): Unit = {
             println("%SZS status: Timeout")
+            killChildProcesses()
             System.exit(1)
           }
         }, timeout.toMillis)
@@ -120,7 +128,7 @@ object Main {
     }
   }  
 
-  private def runConfigurationChecks(settings : Settings, config : Config) {
+  private def runConfigurationChecks(settings : Settings, config : Config) : Unit = {
     val leanBinaryPath = Paths.get(settings.leanBinary)
     if(!Files.exists(leanBinaryPath) || !Files.isExecutable(leanBinaryPath)) {
       throw new IllegalArgumentException(s"Lean binary not found or not executable at path: ${settings.leanBinary}")
@@ -132,6 +140,21 @@ object Main {
     val leanLibraryPath = Paths.get(settings.leanLibraryPath)
     if(!Files.isDirectory(leanLibraryPath)) {
       throw new IllegalArgumentException(s"Lean library path is not a directory: ${settings.leanLibraryPath}")
+    }
+    val tptpDirectoryPath = Paths.get(settings.tptpDirectory)
+    if(!Files.isDirectory(tptpDirectoryPath)) {
+      throw new IllegalArgumentException(s"TPTP directory is not a directory: ${settings.tptpDirectory}")
+    }
+  }
+
+  def killChildProcesses(): Unit = {
+    val currentProcess = ProcessHandle.current()
+    // Get a stream of all descendants (children, grandchildren, etc.)
+    currentProcess.descendants().forEach { handle =>
+      if (handle.isAlive) {
+        Logger.println(s"Killing child process PID: ${handle.pid()} -> ${handle.info().command().orElse("Unknown")}")
+        handle.destroyForcibly() // Equivalent to 'kill -9'
+      }
     }
   }
 
@@ -146,7 +169,7 @@ object Main {
     try {
       val problem = TPTPParser.problem(source)
       for(includes <- problem.includes){
-        var formulas = loadAnnotatedFormulas(includes._1, "/home/jonas/TPTP-v9.2.1")
+        var formulas = loadAnnotatedFormulas(includes._1, settings.tptpDirectory)
         allFormulas = allFormulas ++ formulas
       }
       allFormulas ++ problem.formulas
