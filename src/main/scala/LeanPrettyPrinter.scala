@@ -43,14 +43,22 @@ object LeanPrettyPrinter {
   private def prettyLeanFOFTerm(term: TPTP.FOF.Term): String = term match {
     case TPTP.FOF.AtomicTerm(f, args) => prettyLeanApp(f, args.map(prettyLeanFOFTerm))
     case TPTP.FOF.Variable(name) => if(variablesAsTemplates) "_" else leanIdent(name)
-    case TPTP.FOF.DistinctObject(name) => s"\"${name.drop(1).dropRight(1)}\""
+    case TPTP.FOF.DistinctObject(name) => prettyLeanDistinctObject(name)
     case TPTP.FOF.NumberTerm(value) => value.pretty
   }
 
   private def prettyLeanCNFTerm(term: TPTP.CNF.Term): String = term match {
     case TPTP.CNF.AtomicTerm(f, args) => prettyLeanApp(f, args.map(prettyLeanCNFTerm))
     case TPTP.CNF.Variable(name) => if(variablesAsTemplates) "_" else leanIdent(name)
-    case TPTP.CNF.DistinctObject(name) => s"\"${name.drop(1).dropRight(1)}\""
+    case TPTP.CNF.DistinctObject(name) => prettyLeanDistinctObject(name)
+  }
+
+  private def prettyLeanDistinctObject(name: String): String = {
+    name match {
+      case "$false" => "False"
+      case "$true" => "True"
+      case x => x 
+    }
   }
 
   private def prettyLeanUntypedVariable(name: String): String = if(variablesAsTemplates) s"_" else s"(${leanIdent(name)} : ι)"
@@ -81,7 +89,19 @@ object LeanPrettyPrinter {
   }
 
   private def leanIdent(name: String): String = {
-    "«_" + name + "»"
+    var res = name
+    if(TPTP.isDollarOrDollarDollarWord(name)) {
+      res = name match {
+        case "$true" => "True"
+        case "$false" => "False"
+        case _ => name
+      }
+    }
+    else {
+      res = TPTP.convertStringToAtomicWord(name)
+    }
+    return res
+    
   }
 
 }

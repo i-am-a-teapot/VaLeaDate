@@ -230,7 +230,6 @@ object Main {
       val replacementNode = ProofDag.Node(
         replacementNodeName,
         "axiom",
-        inProof = true,
         replacementFormula,
         node.additionalInfo
       )
@@ -304,7 +303,6 @@ object Main {
       val replacementNode = ProofDag.Node(
         replacementNodeName,
         "negated_conjecture",
-        inProof = true,
         TPTP.FOFAnnotated(replacementNodeName, "negated_conjecture", TPTP.FOF.Logical(negatedParentFormula), None),
         InferenceInformation("cth", "negated_conjecture", Seq(NamedParentInformation(parentName)))
       )

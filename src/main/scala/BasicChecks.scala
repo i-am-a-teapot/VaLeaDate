@@ -126,8 +126,74 @@ object BasicChecks {
         true
     }
 
+    def checkIfEveryAxiomHasFileParentAnnotation(dag: ProofDag.Dag): Boolean = {
+        dag.axioms.forall(axiom => {
+            val node = dag.nodes(axiom)
+            AnnotationInformationHelpers.fileParentInformation(node.additionalInfo).isDefined
+        })
+    }
+
+    def checkSkolemizationStepBasics(dag: ProofDag.Dag) : Boolean = {
+        dag.nodes.values.filter(node => AnnotationInformationHelpers.containsRuleStep("skolemize", node.additionalInfo)).forall(node => {
+            val details = AnnotationInformationHelpers.getSkolemizationInformation(node.additionalInfo)
+            val status = AnnotationInformationHelpers.isEsa(node.additionalInfo)
+            if(!status) {
+                throw new ProofErrorException(s"Skolemization step ${node.name} does not have status esa")
+            }
+            if(details.newSymbols.length != 1) {
+                throw new ProofErrorException(s"Skolemization step ${node.name} does not have exactly one new symbol")
+            }
+            
+            var referencedVariablesFromParents : Set[String] = Set.empty
+            var referencedVariablesInSkolemSymbols : Set[String] = Set.empty
+            for((variable, function, args) <- details.skolemDefinitions) {
+                referencedVariablesFromParents += variable
+                referencedVariablesInSkolemSymbols ++= args
+                
+            }
+            val newSymbolsReferenced = details.newSymbols.forall { sym =>
+                details.skolemDefinitions.exists { case (variable, function, args) =>
+                    function == sym
+                }
+            }
+            val fofFormula = node.formula match {
+                case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(form), _) => form
+                case TPTP.CNFAnnotated(_, _, form, _) => TPTPProblemGenerator.cnfStatementToFOF(form).asInstanceOf[TPTP.FOF.Logical].formula
+                case _ => throw new ProofErrorException(s"Expected CNF or FOF formula for skolemization step ${node.name}")
+            }
+            
+            val fofParent = node.parents.headOption match {
+                case Some(parentName) => dag.nodes.get(parentName) match {
+                    case Some(parentNode) => parentNode.formula match {
+                        case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(form), _) => form
+                        case TPTP.CNFAnnotated(_, _, form, _) => TPTPProblemGenerator.cnfStatementToFOF(form).asInstanceOf[TPTP.FOF.Logical].formula
+                        case _ => throw new ProofErrorException(s"Expected CNF or FOF formula for parent of skolemization step ${node.name}")
+                    }
+                    case None => throw new ProofErrorException(s"Parent node ${parentName} of skolemization step ${node.name} not found in DAG")
+                }
+                case None => throw new ProofErrorException(s"Skolemization step ${node.name} does not have a parent")
+            }
+            if(!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofParent)) {
+                throw new IllegalArgumentException(s"Parent formula of skolemization step ${node.name} is not in NNF")
+            }
+            val exQuantVariablesParent = AnnotatedFormulaHelpers.collectQuantifiedFormulaVariables(fofParent, TPTP.FOF.?)
+            val allQuantVariablesSkol = AnnotatedFormulaHelpers.collectQuantifiedFormulaVariables(fofFormula, TPTP.FOF.!)
+            Logger.println(s"${newSymbolsReferenced} && ${referencedVariablesInSkolemSymbols.subsetOf(allQuantVariablesSkol)} && ${referencedVariablesFromParents.subsetOf(exQuantVariablesParent)}")
+            Logger.println("exQuantifiedVariables: " + allQuantVariablesSkol.mkString(", "))
+            Logger.println("referencedVariablesInSkolemSymbols: " + referencedVariablesInSkolemSymbols.mkString(", "))
+            Logger.println("referencedVariablesFromParents: " + referencedVariablesFromParents.mkString(", "))
+            Logger.println("forallQuantifiedVariablesInParent: " + exQuantVariablesParent.mkString(", "))
+            newSymbolsReferenced && referencedVariablesInSkolemSymbols.subsetOf(allQuantVariablesSkol) && referencedVariablesFromParents.subsetOf(exQuantVariablesParent)
+        })
+    }
+
+
     def performAllBasicChecks(dag: ProofDag.Dag, problemFormulas: Seq[TPTP.AnnotatedFormula], allowAxiomMismatch: Boolean): Unit = {
         //Throw an exception if any of the checks fail, otherwise print success message
+        if(!checkAllEdgesReferToExistingNodes(dag)) {
+            throw new ProofErrorException("Not all edges in the proof DAG refer to existing nodes")
+        }
+
         if (!checkAcyclicity(dag)) {
             throw new ProofErrorException("Proof DAG is not acyclic")
         }
@@ -146,14 +212,17 @@ object BasicChecks {
         if(!checkAllInferencesHaveParents(dag)) {
             throw new ProofErrorException("Not all inferences in the proof DAG have parents") 
         }
-        if(!checkAllEdgesReferToExistingNodes(dag)) {
-            throw new ProofErrorException("Not all edges in the proof DAG refer to existing nodes")
-        }
         if(!checkAllConnectedSinksAreFalse(dag)) {
             throw new ProofErrorException("Not all connected sinks in the proof DAG are false")
         }   
         if(!checkConjectureIsNotUsedAsPremise(dag)) {
             throw new ProofErrorException("Conjecture is used as a premise in the proof DAG")
+        }
+        if(!checkIfEveryAxiomHasFileParentAnnotation(dag)) {
+            throw new ProofErrorException("Not every axiom in the proof DAG has a file parent annotation")
+        }
+        if(!checkSkolemizationStepBasics(dag)) {
+            throw new ProofErrorException("Skolemization steps in the proof DAG do not meet formatting requirements")
         }
         Logger.println("Checking input problem formulas...")
         if(!allowAxiomMismatch) {

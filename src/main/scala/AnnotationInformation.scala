@@ -24,6 +24,9 @@ abstract class ParentInformation
 final case class NamedParentInformation(name: String) extends ParentInformation
 final case class UnnamedInformation(inferenceInformation: InferenceInformation) extends ParentInformation
 
+final case class EmptyAnnotationInformation() extends AnnotationInformation {
+  override def toString(): String = "EmptyAnnotationInformation"
+}
 final case class InferenceInformation(status: String, rule: String, parents: Seq[ParentInformation], additionalInfo: Seq[AdditionalInformation] = Seq.empty) extends AnnotationInformation {
   override def toString(): String = {
     val parentsStr = parents.map {
@@ -33,7 +36,6 @@ final case class InferenceInformation(status: String, rule: String, parents: Seq
     s"InferenceInformation(status=$status, rule=$rule, parents=[$parentsStr], additionalInfo=[${additionalInfo.mkString(", ")}])"
   }
 }
-
 final case class FileInformation(fileName: String, formulaName: String) extends AnnotationInformation {
   override def toString(): String = s"FileInformation(fName=$fileName, name=$formulaName)"
 }

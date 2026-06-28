@@ -8,7 +8,7 @@ object  ProofDag {
   //final case class FileInformation(name: String, role: String) extends AdditionalInformation
   
 
-  final case class Node(name: String, role: String, inProof: Boolean, formula: TPTP.AnnotatedFormula, additionalInfo: AnnotationInformation){
+  final case class Node(name: String, role: String, formula: TPTP.AnnotatedFormula, additionalInfo: AnnotationInformation){
     def parents: Seq[String] = AnnotationInformationHelpers.namedParents(additionalInfo).distinct.sorted
   }
 
@@ -104,8 +104,8 @@ object  ProofDag {
         val statusPart = s"\\n[${escape(node.additionalInfo.toString())}]"
         val formulaPart = s"\\n${escape(truncate(LeanPrettyPrinter.prettyLeanSyntax(node.formula), 140))}"
         val label = base + statusPart + formulaPart
-        val style = if (node.inProof) "filled" else "dashed"
-        val fill = if (node.inProof) "lightgoldenrod1" else "gray90"
+        val style = "filled" 
+        val fill = "lightgoldenrod1" 
         s"  ${dotId(node.name)} [label=\"$label\", shape=box, style=\"$style\", fillcolor=\"$fill\"];"
       }
 
@@ -132,14 +132,6 @@ object  ProofDag {
 
       val annotations = AnnotationInformationHelpers.getInformationFromAnnotation(step.annotations)
       Logger.println(s"Step $name has additional information: $annotations", Logger.VERBOSITY_LOW)
-      
-      //check if there is a status
-      val status = AnnotationInformationHelpers.getStatuses(annotations.get)
-      val fileInfo = AnnotationInformationHelpers.fileParentInformation(annotations.get)
-      if(!assumeThm && status.isEmpty && fileInfo.isEmpty){
-        throw new ProofErrorException(s"Error: no status found for step $name and assumeThm is false")
-      }
-
       val roleOpt = stepRole(step)
       if (roleOpt.isEmpty){
         throw new ProofErrorException(s"Error: could not retrieve role for step $name")
@@ -152,11 +144,26 @@ object  ProofDag {
           throw new ProofErrorException(s"Error: negated conjecture step $name does not have a file parent annotation and cannot be treated as an axiom")
         }
       }
-      // If we've already recorded this node as an actual proof step, that's a duplicate
-      if (nodes.contains(name) && nodes(name).inProof) {
-        throw new IllegalArgumentException(s"Duplicate node name encountered: $name")
-      } 
-      nodes.update(name, Node(name, role, inProof = true, formula = step, additionalInfo = annotations.get))
+      if(annotations.isDefined){
+        //check if there is a status
+        val status = AnnotationInformationHelpers.getStatuses(annotations.get)
+        val fileInfo = AnnotationInformationHelpers.fileParentInformation(annotations.get)
+        if(!assumeThm && status.isEmpty && fileInfo.isEmpty){
+          throw new ProofErrorException(s"Error: no status found for step $name and assumeThm is false")
+        }
+        
+        // If we've already recorded this node as an actual proof step, that's a duplicate
+        if (nodes.contains(name)) {
+          throw new IllegalArgumentException(s"Duplicate node name encountered: $name")
+        } 
+        nodes.update(name, Node(name, role, formula = step, additionalInfo = annotations.get))
+      } else {
+        // If we've already recorded this node as an actual proof step, that's a duplicate
+        if (nodes.contains(name)) {
+          throw new IllegalArgumentException(s"Duplicate node name encountered: $name")
+        } 
+        nodes.update(name, Node(name, role, formula = step, additionalInfo = EmptyAnnotationInformation()))
+      }
     }
     Dag(nodes.toMap)
   }

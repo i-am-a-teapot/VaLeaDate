@@ -39,4 +39,33 @@ object AnnotatedFormulaHelpers {
 
   def sanitizeName(name: String): String =
     name.replace("(", "").replace(")", "").replace(" ", "_").replace("'", "").replace(",", "")
+
+  def collectQuantifiedFormulaVariables(formula: TPTP.FOF.Formula, quantifier: TPTP.FOF.Quantifier): Set[String] = {
+    formula match {
+      case TPTP.FOF.AtomicFormula(_, args) => Set.empty
+      case TPTP.FOF.QuantifiedFormula(quant, variables, body) => (if(quant == quantifier) variables.toSet else Set.empty) ++ collectQuantifiedFormulaVariables(body, quantifier)
+      case TPTP.FOF.UnaryFormula(_, body) => collectQuantifiedFormulaVariables(body, quantifier)
+      case TPTP.FOF.BinaryFormula(_, left, right) => collectQuantifiedFormulaVariables(left, quantifier) ++ collectQuantifiedFormulaVariables(right, quantifier)
+      case TPTP.FOF.Equality(left, right) => Set.empty
+      case TPTP.FOF.Inequality(left, right) => Set.empty
+    }
+  }
+
+  def checkFormulaIsInNNF(formula: TPTP.FOF.Formula) : Boolean = {
+    formula match {
+      case TPTP.FOF.AtomicFormula(_, _) => true
+      case TPTP.FOF.QuantifiedFormula(_, _, body) => checkFormulaIsInNNF(body)
+      case TPTP.FOF.UnaryFormula(TPTP.FOF.~, body) => body match {
+        case TPTP.FOF.AtomicFormula(_, _) => true
+        case TPTP.FOF.QuantifiedFormula(_, _, _) => false
+        case TPTP.FOF.UnaryFormula(_, _) => false
+        case TPTP.FOF.BinaryFormula(_, _, _) => false
+        case TPTP.FOF.Equality(_, _) => true
+        case TPTP.FOF.Inequality(_, _) => true
+      }
+      case TPTP.FOF.BinaryFormula(_, left, right) => checkFormulaIsInNNF(left) && checkFormulaIsInNNF(right)
+      case TPTP.FOF.Equality(_, _) => true
+      case TPTP.FOF.Inequality(_, _) => true
+    }
+  }
 }
