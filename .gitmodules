@@ -1,0 +1,7 @@
+[submodule "vampire"]
+	path = vampire
+	url = https://github.com/vprover/vampire.git
+	branch = leancheck_valeadate
+[submodule "vamplean"]
+	path = vamplean
+	url = https://github.com/vprover/vamplean.git
