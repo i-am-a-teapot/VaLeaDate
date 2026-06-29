@@ -45,10 +45,20 @@ object Main {
 
   def main(args: Array[String]): Unit = {
     val builder = OParser.builder[Config]
-    settings.leanLibraryPath = scala.util.Properties.envOrElse("VAMPLEAN_PATH", "vamplean/.lake/build/lib/lean")
-    settings.leanBinary = scala.util.Properties.envOrElse("LEAN_BINARY", "requirements/elan/toolchains/leanprover--lean4---v4.31.0/bin/lean")
-    settings.vampireBinary = scala.util.Properties.envOrElse("VAMPIRE_BINARY", "vampire/build/vampire")
-    settings.tptpDirectory = scala.util.Properties.envOrElse("TPTP", Paths.get(System.getProperty("user.home"),"TPTP-v9.2.1").toString())
+
+    //Try to get the base path of the binary
+    var binaryBasePath = ""
+    try {
+      var binaryPath = Files.readSymbolicLink(Path.of("/proc/self/exe"))
+      binaryBasePath = binaryPath.getParent.toAbsolutePath.toString
+    } catch {
+      case e: Exception => {}
+    }
+    //These are the default paths when installed via quickinstall script.
+    settings.leanLibraryPath = scala.util.Properties.envOrElse("VAMPLEAN_PATH", Paths.get(binaryBasePath, "vamplean/.lake/build/lib/lean").toString())
+    settings.leanBinary = scala.util.Properties.envOrElse("LEAN_BINARY", Paths.get(binaryBasePath, "requirements/elan/bin/lean").toString())
+    settings.vampireBinary = scala.util.Properties.envOrElse("VAMPIRE_BINARY", Paths.get(binaryBasePath, "vampire/build/vampire").toString())
+    settings.tptpDirectory = scala.util.Properties.envOrElse("TPTP", Paths.get(System.getProperty("user.home"), "TPTP-v9.2.1").toString())
 
     val parser = {
       import builder._

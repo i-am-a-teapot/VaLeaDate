@@ -1,6 +1,6 @@
 echo "Setting up dependencies..."
 
-source sourceRequirements.sh
+source ./sourceRequirements.sh
 
 echo "Building Vampire + VampLean..."
 
