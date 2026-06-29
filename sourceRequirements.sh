@@ -37,3 +37,7 @@ fi
 
 source $HOME/.elan/env
 cd ..
+
+export VAMPLEAN_PATH=$(pwd)/vamplean/.lake/build/lib/lean
+export VAMPIRE_BINARY=$(pwd)/vampire/build/vampire
+export LEAN_BINARY=$HOME/.elan/toolchains/leanprover--lean4---v4.31.0/bin/lean

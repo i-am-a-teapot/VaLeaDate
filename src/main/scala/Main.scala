@@ -45,10 +45,10 @@ object Main {
 
   def main(args: Array[String]): Unit = {
     val builder = OParser.builder[Config]
-    settings.leanLibraryPath = scala.util.Properties.envOrElse("VAMPLEAN_PATH", "")
-    settings.leanBinary = scala.util.Properties.envOrElse("LEAN_BINARY", "~/.elan/toolchains/leanprover--lean4---v4.29.0/bin/lean")
-    settings.vampireBinary = scala.util.Properties.envOrElse("VAMPIRE_BINARY", "~/vampire/vampire")
-    settings.tptpDirectory = scala.util.Properties.envOrElse("TPTP", "~/TPTP-v9.2.1")
+    settings.leanLibraryPath = scala.util.Properties.envOrElse("VAMPLEAN_PATH", "vamplean/.lake/build/lib/lean")
+    settings.leanBinary = scala.util.Properties.envOrElse("LEAN_BINARY", "$HOME/.elan/toolchains/leanprover--lean4---v4.31.0/bin/lean")
+    settings.vampireBinary = scala.util.Properties.envOrElse("VAMPIRE_BINARY", "vampire/build/vampire")
+    settings.tptpDirectory = scala.util.Properties.envOrElse("TPTP", "$HOME/TPTP-v9.2.1")
 
     val parser = {
       import builder._
