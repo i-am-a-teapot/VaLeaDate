@@ -1,24 +1,5 @@
-.PHONY: help compile assembly native clean run help
+.PHONY: compile assembly native clean run help clean-vampire clean-vamplean build-deps
 
-# Default target
-help:
-	@echo "VaLeaDate - Scala TPTP Parser"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  make compile      - Compile the Scala project with SBT"
-	@echo "  make assembly     - Build fat JAR for GraalVM native-image"
-	@echo "  make native       - Build native executable with GraalVM"
-	@echo "  make run FILE=... - Run the application (FILE is required)"
-	@echo "  make run-native   - Run the native executable"
-	@echo "  make clean        - Remove build artifacts"
-	@echo "  make help         - Show this help message"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make compile"
-	@echo "  make assembly"
-	@echo "  make native"
-	@echo "  make run FILE=/path/to/file.tptp"
-	@echo "  make clean"
 
 # Compile the project
 compile:
@@ -87,3 +68,34 @@ clean:
 watch:
 	@echo "Watching for changes..."
 	sbt "~compile"
+
+# Initialize Vampire submodule
+
+build-deps: vampire/build/vampire vamplean/.lake/build/lib/lean/VampLean.olean 
+
+clean-vampire:
+	@echo "Cleaning Vampire build artifacts..."
+	rm -rf vampire/build
+	@echo "Vampire clean complete"
+
+clean-vamplean:
+	@echo "Cleaning VampLean build artifacts..."
+	rm -rf vamplean/.lake/build
+	@echo "VampLean clean complete"
+
+vampire/.git:
+	git submodule update --init vampire; \
+	
+# Build Vampire
+vampire/build/vampire: vampire/.git
+	@echo "Compiling Vampire..."
+	cd vampire && mkdir -p build && cd build && cmake .. && make -j 8
+	@echo "Vampire compilation complete"
+
+# Initialize VampLean submodule
+vamplean/VampLean.lean:
+	git submodule update --init --recursive vamplean; \
+		
+# Build VampLean
+vamplean/.lake/build/lib/lean/VampLean.olean : vamplean/VampLean.lean
+	cd vamplean && lake build
