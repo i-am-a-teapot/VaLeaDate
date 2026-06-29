@@ -29,15 +29,16 @@ fi
 # Add SBT to the PATH
 export PATH=$(pwd)/sbt/bin:$PATH
 
+export ELAN_HOME=$(pwd)/elan
 
-if [ ! -f $HOME/.elan/env ]; then
+if [ ! -f $(pwd)/elan/env ]; then
     echo "Downloading and Installing Lean"
-    curl https://elan.lean-lang.org/elan-init.sh -sSf | sh -s -- -y
+    curl https://elan.lean-lang.org/elan-init.sh -sSf | sh -s -- -y  --no-modify-path --default-toolchain v4.31.0
 fi
 
-source $HOME/.elan/env
+source $(pwd)/elan/env
 cd ..
 
-export VAMPLEAN_PATH=$(pwd)/vamplean/.lake/build/lib/lean
-export VAMPIRE_BINARY=$(pwd)/vampire/build/vampire
-export LEAN_BINARY=$HOME/.elan/toolchains/leanprover--lean4---v4.31.0/bin/lean
+#export VAMPLEAN_PATH=$(pwd)/vamplean/.lake/build/lib/lean
+#export VAMPIRE_BINARY=$(pwd)/vampire/build/vampire
+export LEAN_BINARY=$(pwd)/elan/bin/lean

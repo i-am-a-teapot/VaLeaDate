@@ -1,118 +1,80 @@
 # VaLeaDate
 
-
-## Prerequisites
-
-- Scala 2.13.12 or later
-- SBT 1.9.7 or later
-- Java 11 or later
-
 ## Build
 
-```bash
-sbt compile
+## Quickinstall
+
+A script which *should* handle the whole setup procedure: 
+
+```./quickinstall```
+
+
+
+If something fails there, here is a brief guide on how to install VaLeaDate:
+
+<details>
+  <summary>Detailed installing instructions</summary>
+
+  ### Install prerequisites
+
+VaLeaDate is written in Scala, uses GraalVM to build a native binary and requires Vampire (a custom branch), Lean and VampLean (a Lean Library). 
+
+GraalVM, SBT and Lean are installed (locally) with the following commands:
+
+```
+source ./sourceRequirements.sh
 ```
 
-## Build with Makefile
+you can also install them systemwide, but make sure to set the paths properly (take a look into the ./sourceRequirements.sh script)
 
-```bash
-# Show available targets
-make help
+### Compile Vampire & VampLean
 
-# Compile the project
-make compile
+At this stage, a working lean install is required (provided by the previous script) + standard build-tools
 
-# Build assembly JAR
-make assembly
+```
+make build-deps
+```
 
-# Build native image
+### Compile VaLeaDate (native)
+
+```
 make native
+```
+</details>
 
-# Clean artifacts
-make clean
+## Running VaLeaDate
+
+VaLeaDate requires several binarys to function properly and can get their paths either from the environment variables or command-line arguments.
+
+These are the relevant environment variables (with their default values)
+```
+export VAMPLEAN_PATH="vamplean/.lake/build/lib/lean"
+export LEAN_BINARY="requirements/elan/toolchains/leanprover--lean4---v4.31.0/bin/lean"
+export VAMPIRE_BINARY="vampire/build/vampire"
+export TPTP="$HOME/TPTP-v9.2.1"
 ```
 
-## Run
-
-```bash
-sbt "run <input-file> [options]"
 ```
+Usage: VaLeaDate [options] <input_proof>
 
-Or with Makefile:
-
-```bash
-make run FILE=/path/to/file.tptp
-make run-verbose FILE=/path/to/file.tptp
+  <input_proof>            input TPTP file
+  -o, --output <value>     output file for Graphviz DOT (optional)
+  --v                      enable verbose output
+  --vv                     enable very verbose output
+  -l, --lean-binary <value>
+                           path to the Lean binary
+  -V, --vampire-binary <value>
+                           path to the Vampire binary
+  -L, --lean-library-path <value>
+                           path to the Lean library
+  -n, --no-lean-check      disable verification with Lean
+  -p, --lean-output-path <value>
+                           path to write Lean output file (optional)
+  --assume-thm             assume all formulas without status are theorems
+  --negc-as-thm            treat negated conjecture formulas as theorems
+  --allow-axiom-mismatch   allow syntactic mismatch of axioms between proof and input problem
+  --tptp-directory <value>
+                           path to the TPTP directory
+  -t, --timeout <value>    timeout in seconds (default: 30)
+  --help                   print this help message
 ```
-
-### Options
-
-- `<input>` (required) - Input TPTP file
-- `-o, --output FILE` - Output file (optional)
-- `-v, --verbose` - Enable verbose output
-- `-h, --help` - Show help message
-
-### Examples
-
-Parse a TPTP file:
-```bash
-sbt "run example.tptp"
-# or
-make run FILE=example.tptp
-```
-
-Parse with verbose output:
-```bash
-sbt "run example.tptp -v"
-# or
-make run-verbose FILE=example.tptp
-```
-
-Parse and save the proof DAG as Graphviz DOT:
-```bash
-sbt "run example.tptp -o output.dot"
-```
-
-The default output is a DOT representation of the inference DAG inferred from the proof annotations. You can render it with Graphviz, for example:
-```bash
-dot -Tpng output.dot -o proof.png
-```
-
-
-## Development
-
-Run in development mode with watch:
-```bash
-sbt "~compile"
-```
-
-## GraalVM Native Image Compilation
-
-Build a native executable using GraalVM:
-
-### Prerequisites
-- Install GraalVM with native-image component
-
-### Build Native Image
-
-1. Create a fat JAR:
-   ```bash
-   sbt assembly
-   ```
-
-2. Compile to native executable:
-   ```bash
-   native-image -jar target/scala-2.13/valeadate.jar valeadate
-   ```
-
-3. Run the native executable:
-   ```bash
-   ./ /path/to/file.tptp
-   ```
-
-The resulting `valeadate` executable is a standalone binary with no JVM dependency, resulting in faster startup times and lower memory usage.
-
-## Dependencies
-
-- `scala-tptp-parser_2.13` (1.7.4) - TPTP parser library
-- `scopt` (4.1.0) - Command-line argument parser
