@@ -161,6 +161,11 @@ object BasicChecks {
                 case TPTP.CNFAnnotated(_, _, form, _) => TPTPProblemGenerator.cnfStatementToFOF(form).asInstanceOf[TPTP.FOF.Logical].formula
                 case _ => throw new ProofErrorException(s"Expected CNF or FOF formula for skolemization step ${node.name}")
             }
+
+            if(!details.newSymbols.toSet.subsetOf(fofFormula.symbols)) { 
+                throw new ProofErrorException(s"Not all new symbols in skolemization step ${node.name} are present in the formula: ${fofFormula.pretty}")
+            }
+            
             
             val fofParent = node.parents.headOption match {
                 case Some(parentName) => dag.nodes.get(parentName) match {

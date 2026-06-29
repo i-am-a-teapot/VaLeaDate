@@ -29,6 +29,7 @@ project/**/metals.sbt
 .vscode/
 
 Problems/
+requirements/
 project/**/.bloop/
 project/**/target/
 target/

@@ -11,9 +11,9 @@ object JobScheduler {
   final case class ProcessResult(exitCode: Int, stdin: String, stdout: String, stderr: String, durationMillis: Long, timedOut: Boolean, jobSpec: JobSpec = null, usedParents: Seq[String] = Seq.empty)
 
   private def runProcess(spec: JobSpec): ProcessResult = {
-    val tIn = Files.createTempFile("drac-in-", ".tmp")
-    val tOut = Files.createTempFile("drac-out-", ".tmp")
-    val tErr = Files.createTempFile("drac-err-", ".tmp")
+    val tIn = Files.createTempFile("valeadeate-in-", ".tmp")
+    val tOut = Files.createTempFile("valeadeate-out-", ".tmp")
+    val tErr = Files.createTempFile("valeadeate-err-", ".tmp")
 
     try {
       Files.write(tIn, spec.stdin.getBytes(StandardCharsets.UTF_8))

@@ -53,8 +53,8 @@ object Main {
     val parser = {
       import builder._
       OParser.sequence(
-        programName("DRACULeAn"),
-        head("DRACULeAn", "0.1.0"),
+        programName("VaLeaDate"),
+        head("VaLeaDate", "0.1.0"),
         arg[String]("<input_proof>")
           .required()
           .action((x, c) => c.copy(inputFile = x))
