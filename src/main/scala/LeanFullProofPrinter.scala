@@ -69,7 +69,6 @@ set_option maxRecDepth 100000000""")
     if (dag.conjectures.length > 1) {
       throw new IllegalArgumentException(s"Multiple conjecture nodes found in DAG: ${dag.conjectures.mkString(", ")}. Only one conjecture node is supported.")
     }
-
     if (dag.conjectures.isEmpty) {
       writer.print("False")
     } else {

@@ -35,6 +35,7 @@ object Main {
     verifyWithLean: Boolean = true,
     pathForLeanOutput: Option[String] = None,
     assumeThm : Boolean = false,
+    parallel : Int = 8,
     treatNegatedConjectureAsAxiom : Boolean = false,
     allowSyntacticMismatchOfAxioms : Boolean = false
   )
@@ -56,7 +57,7 @@ object Main {
     }
     //These are the default paths when installed via quickinstall script.
     settings.leanLibraryPath = scala.util.Properties.envOrElse("VAMPLEAN_PATH", Paths.get(binaryBasePath, "vamplean/.lake/build/lib/lean").toString())
-    settings.leanBinary = scala.util.Properties.envOrElse("LEAN_BINARY", Paths.get(binaryBasePath, "requirements/elan/bin/lean").toString())
+    settings.leanBinary = scala.util.Properties.envOrElse("LEAN_BINARY", Paths.get(binaryBasePath, "requirements/elan/toolchains/leanprover--lean4---v4.31.0/bin/lean").toString())
     settings.vampireBinary = scala.util.Properties.envOrElse("VAMPIRE_BINARY", Paths.get(binaryBasePath, "vampire/build/vampire").toString())
     settings.tptpDirectory = scala.util.Properties.envOrElse("TPTP", Paths.get(System.getProperty("user.home"), "TPTP-v9.2.1").toString())
 
@@ -111,6 +112,9 @@ object Main {
         opt[Int]('t', "timeout")
           .action((x, c) => c.copy(timeout = x))
           .text("timeout in seconds (default: 30)"),
+        opt[Int]('j',"parallel")
+          .action((x, c) => c.copy(parallel = x))
+          .text("number of parallel processes for theorem checking (default: 8)"),
         help("help")
           .text("print this help message")
       )
@@ -436,8 +440,8 @@ object Main {
 
   
 
-  private def runLeanCheck(outputFile: Path): JobScheduler.ProcessResult = {
-    val leanCheckSpec = JobScheduler.JobSpec(Seq(settings.leanBinary, "-s", "16000", outputFile.toString()), "", Map("LEAN_PATH" -> settings.leanLibraryPath))
+  private def runLeanCheck(outputFile: Path, parallelism: Int): JobScheduler.ProcessResult = {
+    val leanCheckSpec = JobScheduler.JobSpec(Seq(settings.leanBinary, "-s", "16000", "-j", parallelism.toString, outputFile.toString()), "", Map("LEAN_PATH" -> settings.leanLibraryPath))
     val leanCheckFuture = JobScheduler.runFuture(leanCheckSpec)(scala.concurrent.ExecutionContext.global)
     Await.result(leanCheckFuture, scala.concurrent.duration.Duration.Inf)
   }
@@ -536,8 +540,8 @@ object Main {
 
       val theoremInferences = collectTheoremInferences(dag, config.assumeThm)
       Logger.print(theoremInferences.map(_.name).mkString(", "))
-      val theoremCheckResultsFuture = JobScheduler.runNodes(theoremInferences, parallelism = 8)(buildTheoremCheckJobSpec)
-      val additionalObligationCheckResultsFuture = JobScheduler.runNodes(additionalProofObligations, parallelism = 8)(buildTheoremCheckJobSpec)
+      val theoremCheckResultsFuture = JobScheduler.runNodes(theoremInferences, parallelism = config.parallel)(buildTheoremCheckJobSpec)
+      val additionalObligationCheckResultsFuture = JobScheduler.runNodes(additionalProofObligations, parallelism = config.parallel)(buildTheoremCheckJobSpec)
 
       val theoremCheckResults = Await.result(theoremCheckResultsFuture, scala.concurrent.duration.Duration.Inf)
       val additionalObligationCheckResults = Await.result(additionalObligationCheckResultsFuture, scala.concurrent.duration.Duration.Inf)
@@ -582,15 +586,22 @@ object Main {
       writeLeanOutputFile(outputFile, translatedVariables,
                   theoremCheckResults, additionalObligationCheckResults, dag, 
                   skolemFunctionArities, usedParents)
-      val leanCheckResult = runLeanCheck(outputFile)
+      val leanCheckResult = runLeanCheck(outputFile, config.parallel)
       if(config.pathForLeanOutput.isEmpty){
         Files.delete(outputFile)
       }
       Logger.println(leanCheckResult.durationMillis)
   
       if (leanCheckResult.exitCode != 0) {
+        Logger.println(leanCheckResult.stdout)
+        Logger.println(leanCheckResult.stderr)
+      } 
+      if (leanCheckResult.exitCode == 1) {
         throw new ProofErrorException(s"Lean check failed with exit code ${leanCheckResult.exitCode}.")
       } 
+      if (leanCheckResult.exitCode != 0) {
+        throw new IllegalArgumentException(s"Lean check failed with exit code ${leanCheckResult.exitCode}.")
+      }
 
       println(s"%SZS status VerifiedGood")
     } catch {

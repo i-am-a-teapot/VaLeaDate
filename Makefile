@@ -16,7 +16,7 @@ assembly: compile
 native: assembly
 	@echo "Building native image with GraalVM..."
 	@if command -v native-image >/dev/null 2>&1; then \
-		native-image -jar target/scala-2.13/valeadate.jar -march=native valeadate && \
+		native-image -jar target/scala-2.13/valeadate.jar -march=native --gc=G1 -O3  valeadate && \
 		echo "Native executable created at: ./valeadate"; \
 	else \
 		echo "Error: native-image not found. Install GraalVM native-image."; \

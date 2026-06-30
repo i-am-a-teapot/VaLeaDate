@@ -102,7 +102,7 @@ object LeanPrettyPrinter {
       }
     }
     else {
-      res = "«_"+TPTP.convertStringToName(name)+"»"
+      res = "«_"+name+"»"
     }
     return res
     

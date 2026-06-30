@@ -140,9 +140,7 @@ object  ProofDag {
       if(negatedConjectureAsAxiom && role == "negated_conjecture") {
         if( AnnotationInformationHelpers.fileParentInformation(annotations.get).isDefined) {
           role = "axiom"
-        } else {
-          throw new ProofErrorException(s"Error: negated conjecture step $name does not have a file parent annotation and cannot be treated as an axiom")
-        }
+        } 
       }
       if(annotations.isDefined){
         //check if there is a status

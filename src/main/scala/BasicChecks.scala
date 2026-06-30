@@ -133,6 +133,14 @@ object BasicChecks {
         })
     }
 
+    def checkESAIsSupported(dag: ProofDag.Dag): Unit = {
+        dag.nodes.values.filter(node => AnnotationInformationHelpers.isEsa(node.additionalInfo)).foreach(node => {
+            if(!AnnotationInformationHelpers.containsRuleStep("skolemize", node.additionalInfo)) {
+                throw new IllegalArgumentException(s"ESA step ${node.name} does have a esa inference which is not supported step.")
+            }
+        })
+    }
+
     def checkSkolemizationStepBasics(dag: ProofDag.Dag) : Boolean = {
         dag.nodes.values.filter(node => AnnotationInformationHelpers.containsRuleStep("skolemize", node.additionalInfo)).forall(node => {
             val details = AnnotationInformationHelpers.getSkolemizationInformation(node.additionalInfo)
@@ -229,6 +237,7 @@ object BasicChecks {
         if(!checkSkolemizationStepBasics(dag)) {
             throw new ProofErrorException("Skolemization steps in the proof DAG do not meet formatting requirements")
         }
+        checkESAIsSupported(dag)
         Logger.println("Checking input problem formulas...")
         if(!allowAxiomMismatch) {
             if(!checkInputProblemIsSameAsProof(dag, problemFormulas)) {
