@@ -6,7 +6,7 @@ object LeanPrettyPrinter {
   def prettyLeanSyntax(value: TPTP.AnnotatedFormula): String = value match {
     case TPTP.FOFAnnotated(_, _, formula, _) => prettyLeanFOFStatement(formula)
     case TPTP.CNFAnnotated(_, _, formula, _) => prettyLeanCNFStatement(formula)
-    case _ => throw new IllegalArgumentException(s"Unsupported annotated formula type: ${value.getClass}")
+    case _ => throw new ProofUnsureException(s"Unsupported annotated formula type: ${value.getClass}")
   }
 
   def prettyLeanFOFStatement(statement: TPTP.FOF.Statement): String = statement match {
@@ -66,11 +66,12 @@ object LeanPrettyPrinter {
   private def prettyLeanFOFQuantifier(quantifier: TPTP.FOF.Quantifier): String = quantifier match {
     case TPTP.FOF.! => "∀"
     case TPTP.FOF.? => "∃"
-    case _ => throw new IllegalArgumentException(s"Unsupported quantifier in FOF: $quantifier")
+    case _ => throw new ProofUnsureException(s"Unsupported quantifier in FOF: $quantifier")
   }
 
   private def prettyLeanFOFUnary(connective: TPTP.FOF.UnaryConnective): String = connective match {
     case TPTP.FOF.~ => "¬"
+    case _ => throw new ProofUnsureException(s"Unsupported unary connective in FOF: $connective")
   }
 
   private def prettyLeanFOFBinary(connective: TPTP.FOF.BinaryConnective): String = connective match {
@@ -79,7 +80,7 @@ object LeanPrettyPrinter {
     case TPTP.FOF.<= => "←"
     case TPTP.FOF.| => "∨"
     case TPTP.FOF.& => "∧"
-    case _ => throw new IllegalArgumentException(s"Unsupported binary connective in FOF: $connective")
+    case _ => throw new ProofUnsureException(s"Unsupported binary connective in FOF: $connective")
   }
 
 

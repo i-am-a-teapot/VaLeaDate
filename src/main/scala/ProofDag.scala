@@ -125,8 +125,8 @@ object  ProofDag {
 
     steps.foreach { step =>
       val nameOpt = stepName(step)
-      if (nameOpt.isEmpty) System.err.println(s"Error: could not retrieve name for step $step")
-      val name = AnnotatedFormulaHelpers.sanitizeName(nameOpt.getOrElse(throw new IllegalArgumentException(s"name not found for step $step")))
+      if (nameOpt.isEmpty) throw new ProofUnsureException(s"Error: could not retrieve name for step $step")
+      val name = AnnotatedFormulaHelpers.sanitizeName(nameOpt.get)
 
       Logger.println(s"Processing step $name")
 
@@ -136,7 +136,7 @@ object  ProofDag {
       if (roleOpt.isEmpty){
         throw new ProofErrorException(s"Error: could not retrieve role for step $name")
       }
-      var role = roleOpt.getOrElse(throw new IllegalArgumentException(s"role not found for step $name"))
+      var role = roleOpt.getOrElse(throw new ProofUnsureException(s"role not found for step $name"))
       if(negatedConjectureAsAxiom && role == "negated_conjecture") {
         if( AnnotationInformationHelpers.fileParentInformation(annotations.get).isDefined) {
           role = "axiom"
@@ -152,13 +152,13 @@ object  ProofDag {
         
         // If we've already recorded this node as an actual proof step, that's a duplicate
         if (nodes.contains(name)) {
-          throw new IllegalArgumentException(s"Duplicate node name encountered: $name")
+          throw new ProofErrorException(s"Duplicate node name encountered: $name")
         } 
         nodes.update(name, Node(name, role, formula = step, additionalInfo = annotations.get))
       } else {
         // If we've already recorded this node as an actual proof step, that's a duplicate
         if (nodes.contains(name)) {
-          throw new IllegalArgumentException(s"Duplicate node name encountered: $name")
+          throw new ProofErrorException(s"Duplicate node name encountered: $name")
         } 
         nodes.update(name, Node(name, role, formula = step, additionalInfo = EmptyAnnotationInformation()))
       }

@@ -80,7 +80,9 @@ object SkolemizationGeneration {
             }
             skolemFunctionsDefined += sym
             details.skolemDefinitions.find(_._2 == sym).foreach { case (variable, function, args) =>
-                if (skolemFunctionArities.contains(sym) && skolemFunctionArities(sym) != args.size) {
+                val (boundVariables, _) = findBoundVariablesUpToExistential(node.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula, variable) 
+                Logger.println(s"Skolem function $sym is defined for variable $variable with variables ${args.mkString(", ")} and formula has ${boundVariables.mkString(", ")} as bound variables")
+                if(args.size != boundVariables.size){
                     throw new ProofErrorException(s"Skolem function $sym is defined with inconsistent arities in the proof DAG")
                 }
                 Logger.println(s"Adding skolem function $sym with arity ${args.size} to the map of skolem function arities")

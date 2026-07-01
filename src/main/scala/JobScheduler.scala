@@ -56,9 +56,7 @@ object JobScheduler {
     * The `jobBuilder` receives the node and its parents.
     * Returns a Future completing with a map from node name -> ProcessResult when all specified nodes are done.
     */
-  def runNodes(inferencesToRun: Seq[TPTPProblemGenerator.Inference], parallelism: Int)(jobBuilder: (TPTPProblemGenerator.Inference) => JobSpec): Future[Map[String, ProcessResult]] = {
-    val executor = java.util.concurrent.Executors.newFixedThreadPool(math.max(1, parallelism))
-    implicit val ec: ExecutionContext = ExecutionContext.fromExecutorService(executor)
+  def runNodes(inferencesToRun: Seq[TPTPProblemGenerator.Inference])(jobBuilder: (TPTPProblemGenerator.Inference) => JobSpec)(implicit ec: ExecutionContext): Future[Map[String, ProcessResult]] = {
     val jobFutures = inferencesToRun.map { inference =>
       Future {
         val spec = jobBuilder(inference)
@@ -70,7 +68,7 @@ object JobScheduler {
         (inference.name, res.copy(usedParents = usedParents.map(parentNo => AnnotatedFormulaHelpers.sanitizeName(inference.premises(parentNo.toInt - 1).name))))
       }
     }
-    Future.sequence(jobFutures).map(_.toMap).andThen { case _ => executor.shutdown() }(ExecutionContext.parasitic)
+    Future.sequence(jobFutures).map(_.toMap)
   }
 
   def runFuture(spec: JobSpec)(implicit ec: ExecutionContext): Future[ProcessResult] = Future {
@@ -78,4 +76,5 @@ object JobScheduler {
   }
 
   def runFutures(specs: Seq[JobSpec])(implicit ec: ExecutionContext): Future[Seq[ProcessResult]] = Future.sequence(specs.map(runFuture))
+  
 }

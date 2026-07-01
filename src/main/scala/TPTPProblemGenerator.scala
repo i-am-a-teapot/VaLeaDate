@@ -1,4 +1,5 @@
 import leo.datastructures.TPTP
+import java.nio.file.Paths
 
 object TPTPProblemGenerator {
   case class Inference (
@@ -10,7 +11,7 @@ object TPTPProblemGenerator {
   private def stringFromFormulaWithRole(formula: TPTP.AnnotatedFormula, role: String): String = formula match {
     case TPTP.FOFAnnotated(name, _, form, _) => (TPTP.FOFAnnotated(name, role, form, None)).pretty
     case TPTP.CNFAnnotated(name, _, form, _) => TPTP.FOFAnnotated(name, role, cnfStatementToFOF(form), None).pretty
-    case _ => throw new IllegalArgumentException(s"Unsupported formula type for ${formula.getClass}")
+    case _ => throw new ProofUnsureException(s"Unsupported formula type for ${formula.getClass}")
   }
 
   def generateProblemFromInference(inference: Inference): String = {
@@ -89,5 +90,55 @@ object TPTPProblemGenerator {
       accResult = accResult union fResult._2
     }
     (mapResult, accResult)
+  }
+
+  final def buildVampireJobSpec(
+      inputProblemFile: String,
+      proofFileBasePath: String,
+      vampireBinary: String,
+      tptpPath: String
+  ): JobScheduler.JobSpec = {
+    var fullPath = Paths.get(inputProblemFile)
+    if (!fullPath.isAbsolute) {
+      fullPath = Paths.get(proofFileBasePath, inputProblemFile)
+    }
+    JobScheduler.JobSpec(
+      Seq(
+        vampireBinary,
+        fullPath.toString(),
+        "--mode",
+        "translate",
+        "--output_axiom_names",
+        "on"
+      ),
+      env = Map("TPTP" -> tptpPath)
+    )
+  }
+
+  final def buildTheoremCheckJobSpec(
+      inference: Inference,
+      vampireBinary: String,
+      tptpPath: String
+  ): JobScheduler.JobSpec = {
+    val command = Seq(
+      vampireBinary,
+      "--proof_extra",
+      "lean",
+      "--proof",
+      "leancheck",
+      "-om",
+      "lean",
+      "--skolemization",
+      "syntactic",
+      "-lpp",
+      inference.name + "_",
+      "-wvo",
+      "introduced_only",
+      "-t",
+      "0",
+    )
+    val problemText =
+      TPTPProblemGenerator.generateProblemFromInference(inference)
+    JobScheduler.JobSpec(command, stdin = problemText, env = Map("TPTP" -> tptpPath))
   }
 }

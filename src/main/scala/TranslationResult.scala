@@ -8,7 +8,13 @@ object TranslationResult {
     text.split(beginMarker)(1).split(endMarker)(0).trim
   }
   
-  def parseTranslationResult(result: String): TranslationResult = {
+  def parseTranslationResult(res: JobScheduler.ProcessResult): TranslationResult = {
+    //if(res.exitCode != 0) {
+    //  throw new ProofUnsureException(
+    //    s"Vampire translation failed with exit code ${res.exitCode}.\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}"
+    //  )
+    //}
+    val result = res.stdout
     val variableDeclarations = sectionBetween(result, "% BEGIN Variable Declarations", "% END Variable Declarations")
     val inputFormulas = sectionBetween(result, "% BEGIN Input Formulas", "% END Input Formulas\n")
     val inputFormulaLines = inputFormulas.split("\n").map(_.trim).filter(_.nonEmpty)

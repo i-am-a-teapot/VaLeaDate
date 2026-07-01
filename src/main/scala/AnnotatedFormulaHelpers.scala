@@ -20,7 +20,7 @@ object AnnotatedFormulaHelpers {
       case Some((gt, _)) => gatherKeywordsInTerm(gt, keywords)
       case None => Seq.empty
     }
-    if (all.size > 1) throw new IllegalArgumentException(s"Multiple sections from $keywords found in annotation")
+    if (all.size > 1) throw new ProofUnsureException(s"Multiple sections from $keywords found in annotation")
     all.headOption
   }
 

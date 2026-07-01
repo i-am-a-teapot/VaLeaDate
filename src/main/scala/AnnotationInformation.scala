@@ -225,14 +225,14 @@ final object AnnotationInformationHelpers {
     val newSymbolInformation = newSymbolTerm match {
       case MetaFunctionData(f, args) => {
         if(f != "new_symbols") {
-          throw new IllegalArgumentException(s"Expected new_symbols term, found $f")
+          throw new ProofErrorException(s"Expected new_symbols term, found $f")
         }
         if(args.size < 2) {
-          throw new IllegalArgumentException(s"Expected new_symbols term to have at least 2 arguments, found ${args.size}")
+          throw new ProofErrorException(s"Expected new_symbols term to have at least 2 arguments, found ${args.size}")
         }
         val typeOfNewSymobls = args(0).data match {
           case Seq(TPTP.MetaFunctionData(typeName, Seq())) => typeName
-          case _ => throw new IllegalArgumentException(s"Expected new_symbols term to have a type as the first argument, found ${args(0).pretty}")
+          case _ => throw new ProofUnsureException(s"Expected new_symbols term to have a type as the first argument, found ${args(0).pretty}")
         }
         Logger.println(s"Type of new symbols term: ${typeOfNewSymobls}", Logger.VERBOSITY_MEDIUM)
         val newSymbols = args(1).list match {
@@ -240,12 +240,12 @@ final object AnnotationInformationHelpers {
             case Seq(TPTP.MetaFunctionData(name, Seq())) => Some(name)
             case _ => None
           })
-          case None => throw new IllegalArgumentException(s"Expected new_symbols term to have a list as the second argument, found ${args(1).pretty}")
+          case None => throw new ProofUnsureException(s"Expected new_symbols term to have a list as the second argument, found ${args(1).pretty}")
         }
         Logger.println(s"New symbols term: ${newSymbols}", Logger.VERBOSITY_MEDIUM)
         newSymbols
       }
-      case _ => throw new IllegalArgumentException(s"Expected new_symbols term to be a MetaFunctionData, found ${newSymbolTerm.pretty}")
+      case _ => throw new ProofUnsureException(s"Expected new_symbols term to be a MetaFunctionData, found ${newSymbolTerm.pretty}")
     }
 
     val skolemizeTerm = skolemizeTerms.headOption.getOrElse {
@@ -254,14 +254,14 @@ final object AnnotationInformationHelpers {
     val skolemArityInformation = skolemizeTerm match {
       case MetaFunctionData(f, args) => {
         if(f != "skolemize") {
-          throw new IllegalArgumentException(s"Expected skolemize term, found $f")
+          throw new ProofErrorException(s"Expected skolemize term, found $f")
         }
         if(args.size < 2) {
-          throw new IllegalArgumentException(s"Expected skolemize term to have at least 2 arguments, found ${args.size}")
+          throw new ProofErrorException(s"Expected skolemize term to have at least 2 arguments, found ${args.size}")
         }
         val variableToSkolemize = args(0).data match {
           case Seq(TPTP.MetaVariable(v)) => v
-          case _ => throw new IllegalArgumentException(s"Expected skolemize term to have a variable as the first argument, found ${args(0).pretty}")
+          case _ => throw new ProofErrorException(s"Expected skolemize term to have a variable as the first argument, found ${args(0).pretty}")
         }
         Logger.println(s"Variable to skolemize: ${variableToSkolemize}", Logger.VERBOSITY_MEDIUM)
         val skolemFunctionSize = args(1).data match {
@@ -275,12 +275,12 @@ final object AnnotationInformationHelpers {
             }
             (f, argNames)
           }
-          case _ => throw new IllegalArgumentException(s"Expected skolemize term to have a function call as the second argument, found ${args(1).pretty}")
+          case _ => throw new ProofErrorException(s"Expected skolemize term to have a function as the second argument, found ${args(1).pretty}")
         }
         Logger.println(s"Skolem function: ${skolemFunctionSize._1}(${skolemFunctionSize._2.mkString(", ")})", Logger.VERBOSITY_MEDIUM)
         Seq((variableToSkolemize, skolemFunctionSize._1, skolemFunctionSize._2))
       }
-      case _ => throw new IllegalArgumentException(s"Expected skolemize term to be a MetaFunctionData, found ${skolemizeTerm.pretty}")
+      case _ => throw new ProofUnsureException(s"Expected skolemize term to be a MetaFunctionData, found ${skolemizeTerm.pretty}")
     }
 
     SkolemizationInformation(newSymbolInformation, skolemArityInformation)
@@ -293,7 +293,7 @@ final object AnnotationInformationHelpers {
       case Some((gt, _)) => gatherKeywordsInTerm(gt, keywords)
       case None => Seq.empty
     }
-    if (all.size > 1) throw new IllegalArgumentException(s"Multiple sections from $keywords found in annotation")
+    if (all.size > 1) throw new ProofUnsureException(s"Multiple sections from $keywords found in annotation")
     all
   }
 

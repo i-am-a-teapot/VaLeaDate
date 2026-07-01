@@ -7,90 +7,126 @@ object BasicChecks {
     val INFERENCE = "inference"
     val NEGATED_CONJECTURE = "negated_conjecture"
 
-    def checkAcyclicity(dag: ProofDag.Dag): Boolean = {
-        dag.isAcyclic
+    def checkAcyclicity(dag: ProofDag.Dag): Unit = {
+        if (!dag.isAcyclic) {
+            throw new ProofErrorException("Proof DAG is not acyclic")
+        }
     }
 
-    def checkAllSourcesAreAxiomsOrConjectures(dag: ProofDag.Dag): Boolean = {
+    def checkAllSourcesAreAxiomsOrConjectures(dag: ProofDag.Dag): Unit = {
         var hasConjecture = !dag.conjectures.isEmpty
-        dag.sources.forall(source => dag.nodes.get(source) match {
-            case Some(node) => node.role == AXIOM || (hasConjecture && node.role == CONJECTURE) || (!hasConjecture && node.role == NEGATED_CONJECTURE)
-            case None => throw new IllegalArgumentException(s"Source node $source not found in DAG nodes")
+        dag.sources.foreach(source => dag.nodes.get(source) match {
+            case Some(node) =>
+                val roleIsAllowed = node.role == AXIOM ||
+                    (hasConjecture && node.role == CONJECTURE) ||
+                    (!hasConjecture && node.role == NEGATED_CONJECTURE)
+                if (!roleIsAllowed) {
+                    throw new ProofErrorException(s"Source node $source has unexpected role '${node.role}'")
+                }
+            case None => throw new ProofErrorException(s"Source node $source not found in DAG nodes")
         })
     }
 
-    def checkAllNegatedConjecturesAreCTH(dag: ProofDag.Dag): Boolean = {
-        dag.negatedConjectures.forall(node => AnnotationInformationHelpers.isCth(dag.nodes(node).additionalInfo))
+    def checkAllNegatedConjecturesAreCTH(dag: ProofDag.Dag): Unit = {
+        dag.negatedConjectures.foreach(node => {
+            val dagNode = dag.nodes.getOrElse(node, throw new ProofErrorException(s"Negated conjecture node $node not found in DAG nodes"))
+            if (!AnnotationInformationHelpers.isCth(dagNode.additionalInfo)) {
+                throw new ProofErrorException(s"Negated conjecture node $node is missing CTH status")
+            }
+        })
     }
 
-    def checkAllNegatedConjectureHaveConjectureParent(dag: ProofDag.Dag): Boolean = {
-        dag.negatedConjectures.forall(node => dag.nodes(node).parents.exists(parent => 
-            dag.nodes(parent).role == CONJECTURE)
-        )
+    def checkAllNegatedConjectureHaveConjectureParent(dag: ProofDag.Dag): Unit = {
+        dag.negatedConjectures.foreach(node => {
+            val dagNode = dag.nodes.getOrElse(node, throw new ProofErrorException(s"Negated conjecture node $node not found in DAG nodes"))
+            val hasConjectureParent = dagNode.parents.exists(parent => {
+                val parentNode = dag.nodes.getOrElse(parent, throw new ProofErrorException(s"Parent node $parent of negated conjecture $node not found in DAG nodes"))
+                parentNode.role == CONJECTURE
+            })
+            if (!hasConjectureParent) {
+                throw new ProofErrorException(s"Negated conjecture node $node does not have a conjecture parent")
+            }
+        })
     }
 
 
-    def checkAllInferencesHaveParents(dag: ProofDag.Dag): Boolean = {
+    def checkAllInferencesHaveParents(dag: ProofDag.Dag): Unit = {
         var hasConjecture = !dag.conjectures.isEmpty
-        dag.nodes.values.filter(node => node.role != AXIOM && node.role != CONJECTURE).forall(
-            node => if(!hasConjecture && node.role == NEGATED_CONJECTURE) true else node.parents.nonEmpty
+        dag.nodes.values.filter(node => node.role != AXIOM && node.role != CONJECTURE).foreach(
+            node => if (!hasConjecture && node.role == NEGATED_CONJECTURE) {
+                ()
+            } else if (node.parents.isEmpty) {
+                throw new ProofErrorException(s"Inference node ${node.name} with role '${node.role}' has no parents")
+            }
         )
     }
 
-    def checkAllEdgesReferToExistingNodes(dag: ProofDag.Dag): Boolean = {
+    def checkAllEdgesReferToExistingNodes(dag: ProofDag.Dag): Unit = {
         val nodeNames = dag.nodes.keySet
-        dag.edges.forall { case ProofDag.Edge(from, to) => nodeNames.contains(from) && nodeNames.contains(to) }
+        dag.edges.foreach {
+            case ProofDag.Edge(from, to) =>
+                if (!nodeNames.contains(from)) {
+                    throw new ProofErrorException(s"Edge references missing source node '$from'")
+                }
+                if (!nodeNames.contains(to)) {
+                    throw new ProofErrorException(s"Edge references missing target node '$to'")
+                }
+        }
     }
 
-    def checkAllConnectedSinksAreFalse(dag: ProofDag.Dag): Boolean = {
+    def checkAllConnectedSinksAreFalse(dag: ProofDag.Dag): Unit = {
         val connectedSinks = dag.sinks.filter(sink => dag.edges.exists(edge => edge.to == sink))
         Logger.println(s"Connected sinks: ${connectedSinks.mkString(", ")}")
-        connectedSinks.forall(connectedSink => {
-        val connectedSinkNode = dag.nodes.get(connectedSink) 
-  
-        connectedSinkNode match {
-            case Some(form) => form.formula match {
-                
+        connectedSinks.foreach(connectedSink => {
+            val connectedSinkNode = dag.nodes.getOrElse(connectedSink, throw new ProofErrorException(s"Connected sink $connectedSink not found in DAG nodes"))
+
+            connectedSinkNode.formula match {
                 case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(value), _) =>
                     value match {
-                        case TPTP.FOF.AtomicFormula("$false", _) => true
-                        case _ => Logger.println(s"Connected sink $connectedSink is not false: ${value.pretty}"); false
-                    } 
-                case TPTP.CNFAnnotated(_, _, TPTP.CNF.Logical(value), _) => 
-                    if(value.isEmpty) {
-                        true
-                    } else if(value.size == 1) {
+                        case TPTP.FOF.AtomicFormula("$false", _) => ()
+                        case _ =>
+                            Logger.println(s"Connected sink $connectedSink is not false: ${value.pretty}")
+                            throw new ProofErrorException(s"Connected sink $connectedSink must be '$$false' but is '${value.pretty}'")
+                    }
+                case TPTP.CNFAnnotated(_, _, TPTP.CNF.Logical(value), _) =>
+                    if (value.isEmpty) {
+                        ()
+                    } else if (value.size == 1) {
                         value.head match {
-                            case TPTP.CNF.PositiveAtomic(TPTP.CNF.AtomicFormula("$false", _)) => true
-                            case TPTP.CNF.NegativeAtomic(TPTP.CNF.AtomicFormula("$true", _)) => true
-                            case _ => Logger.println(s"Connected sink $connectedSink is not false: ${value.head.pretty}"); false
+                            case TPTP.CNF.PositiveAtomic(TPTP.CNF.AtomicFormula("$false", _)) => ()
+                            case TPTP.CNF.NegativeAtomic(TPTP.CNF.AtomicFormula("$true", _)) => ()
+                            case _ =>
+                                Logger.println(s"Connected sink $connectedSink is not false: ${value.head.pretty}")
+                                throw new ProofErrorException(s"Connected sink $connectedSink must be false but contains '${value.head.pretty}'")
                         }
                     } else {
-                        false
+                        throw new ProofErrorException(s"Connected sink $connectedSink CNF clause has ${value.size} literals, expected contradiction")
                     }
-                case _ => Logger.println(s"Unexpected formula type for connected sink $connectedSink"); false
+                case _ =>
+                    Logger.println(s"Unexpected formula type for connected sink $connectedSink")
+                    throw new ProofErrorException(s"Unexpected formula type for connected sink $connectedSink")
             }
-            case _ => Logger.println(s"Connected sink $connectedSink not found in DAG nodes"); false
-        }}
-        )
-        
+        })
     }
 
-    def checkConjectureIsNotUsedAsPremise(dag: ProofDag.Dag): Boolean = {
+    def checkConjectureIsNotUsedAsPremise(dag: ProofDag.Dag): Unit = {
         val conjectures = dag.nodes.values.filter(_.role == CONJECTURE).map(_.name).toSet
         val childrenOfConjectures : Set[String] = dag.edges.collect { 
             case ProofDag.Edge(from, to) if(conjectures.contains(from)) => to
             }.toSet
             
-        childrenOfConjectures.forall(child => 
+        childrenOfConjectures.foreach(child => 
             dag.nodes.get(child) match {
-                case Some(node) => node.role == NEGATED_CONJECTURE
-                case None => throw new IllegalArgumentException(s"Conjecture child ${child} not found in DAG nodes")
+                case Some(node) =>
+                    if (node.role != NEGATED_CONJECTURE) {
+                        throw new ProofErrorException(s"Conjecture is used as premise for node $child with role '${node.role}'")
+                    }
+                case None => throw new ProofErrorException(s"Conjecture child $child not found in DAG nodes")
             }
         )
     }
 
-    def checkInputProblemIsSameAsProof(dag: ProofDag.Dag, problemFormulas: Seq[TPTP.AnnotatedFormula]): Boolean = {
+    def checkInputProblemIsSameAsProof(dag: ProofDag.Dag, problemFormulas: Seq[TPTP.AnnotatedFormula]): Unit = {
         val nodesToCheck = dag.axioms ++ dag.conjectures
         for(equivsToCheck <- nodesToCheck){ 
             val problemFormulaNameOpt = AnnotationInformationHelpers.fileParentInformation(dag.nodes(equivsToCheck).additionalInfo)
@@ -105,13 +141,13 @@ object BasicChecks {
             val fofProblemFormula = problemFormula match {
                 case TPTP.CNFAnnotated(_, _, form, _) => TPTPProblemGenerator.cnfStatementToFOF(form).asInstanceOf[TPTP.FOF.Logical].formula
                 case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(form), _) => form
-                case _ => throw new IllegalArgumentException(s"Expected CNF or FOF formula for problem formula $problemFormulaName")
+                case _ => throw new ProofUnsureException(s"Expected CNF or FOF formula for problem formula $problemFormulaName")
             }
             val nodeFromProof = dag.nodes(equivsToCheck)
             val fofNodeFormula = nodeFromProof.formula match {
                 case TPTP.CNFAnnotated(_, _, form, _) => TPTPProblemGenerator.cnfStatementToFOF(form).asInstanceOf[TPTP.FOF.Logical].formula
                 case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(form), _) => form
-                case _ => throw new IllegalArgumentException(s"Expected CNF or FOF formula for axiom node $equivsToCheck in DAG")
+                case _ => throw new ProofUnsureException(s"Expected CNF or FOF formula for axiom node $equivsToCheck in DAG")
             }
 
             if(problemFormula.role != nodeFromProof.role) {
@@ -120,29 +156,32 @@ object BasicChecks {
 
             Logger.println(s"Checking alpha-equivalence for axiom $equivsToCheck: ${fofNodeFormula.pretty} vs ${fofProblemFormula.pretty}")
             if(!AlphaEquivalenceChecker.checkAlphaEquivalence(fofNodeFormula, fofProblemFormula)) {
-                return false
+                throw new ProofErrorException(
+                    s"Formula mismatch for node $equivsToCheck: proof formula '${fofNodeFormula.pretty}' is not alpha-equivalent to input formula '${fofProblemFormula.pretty}'"
+                )
             }
         }
-        true
     }
 
-    def checkIfEveryAxiomHasFileParentAnnotation(dag: ProofDag.Dag): Boolean = {
-        dag.axioms.forall(axiom => {
+    def checkIfEveryAxiomHasFileParentAnnotation(dag: ProofDag.Dag): Unit = {
+        dag.axioms.foreach(axiom => {
             val node = dag.nodes(axiom)
-            AnnotationInformationHelpers.fileParentInformation(node.additionalInfo).isDefined
+            if (AnnotationInformationHelpers.fileParentInformation(node.additionalInfo).isEmpty) {
+                throw new ProofErrorException(s"Axiom node $axiom does not have a file parent annotation")
+            }
         })
     }
 
     def checkESAIsSupported(dag: ProofDag.Dag): Unit = {
         dag.nodes.values.filter(node => AnnotationInformationHelpers.isEsa(node.additionalInfo)).foreach(node => {
             if(!AnnotationInformationHelpers.containsRuleStep("skolemize", node.additionalInfo)) {
-                throw new IllegalArgumentException(s"ESA step ${node.name} does have a esa inference which is not supported step.")
+                throw new ProofUnsureException(s"ESA step ${node.name} does have a esa inference which is not supported step.")
             }
         })
     }
 
-    def checkSkolemizationStepBasics(dag: ProofDag.Dag) : Boolean = {
-        dag.nodes.values.filter(node => AnnotationInformationHelpers.containsRuleStep("skolemize", node.additionalInfo)).forall(node => {
+    def checkSkolemizationStepBasics(dag: ProofDag.Dag) : Unit = {
+        dag.nodes.values.filter(node => AnnotationInformationHelpers.containsRuleStep("skolemize", node.additionalInfo)).foreach(node => {
             val details = AnnotationInformationHelpers.getSkolemizationInformation(node.additionalInfo)
             val status = AnnotationInformationHelpers.isEsa(node.additionalInfo)
             if(!status) {
@@ -170,7 +209,7 @@ object BasicChecks {
                 case _ => throw new ProofErrorException(s"Expected CNF or FOF formula for skolemization step ${node.name}")
             }
 
-            if(!details.newSymbols.toSet.subsetOf(fofFormula.symbols)) { 
+            if(!details.newSymbols.toSet.subsetOf(fofFormula.symbols)) {
                 throw new ProofErrorException(s"Not all new symbols in skolemization step ${node.name} are present in the formula: ${fofFormula.pretty}")
             }
             
@@ -187,7 +226,7 @@ object BasicChecks {
                 case None => throw new ProofErrorException(s"Skolemization step ${node.name} does not have a parent")
             }
             if(!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofParent)) {
-                throw new IllegalArgumentException(s"Parent formula of skolemization step ${node.name} is not in NNF")
+                throw new ProofUnsureException(s"Parent formula of skolemization step ${node.name} is not in NNF")
             }
             val exQuantVariablesParent = AnnotatedFormulaHelpers.collectQuantifiedFormulaVariables(fofParent, TPTP.FOF.?)
             val allQuantVariablesSkol = AnnotatedFormulaHelpers.collectQuantifiedFormulaVariables(fofFormula, TPTP.FOF.!)
@@ -196,53 +235,34 @@ object BasicChecks {
             Logger.println("referencedVariablesInSkolemSymbols: " + referencedVariablesInSkolemSymbols.mkString(", "))
             Logger.println("referencedVariablesFromParents: " + referencedVariablesFromParents.mkString(", "))
             Logger.println("forallQuantifiedVariablesInParent: " + exQuantVariablesParent.mkString(", "))
-            newSymbolsReferenced && referencedVariablesInSkolemSymbols.subsetOf(allQuantVariablesSkol) && referencedVariablesFromParents.subsetOf(exQuantVariablesParent)
+            if (!newSymbolsReferenced) {
+                throw new ProofErrorException(s"Skolemization step ${node.name} declares new symbols that are not defined in skolem definitions")
+            }
+            if (!referencedVariablesInSkolemSymbols.subsetOf(allQuantVariablesSkol)) {
+                throw new ProofErrorException(s"Skolemization step ${node.name} references variables in skolem symbols that are not universally quantified in the step formula")
+            }
+            if (!referencedVariablesFromParents.subsetOf(exQuantVariablesParent)) {
+                throw new ProofErrorException(s"Skolemization step ${node.name} references source variables that are not existentially quantified in the parent formula")
+            }
         })
     }
 
 
     def performAllBasicChecks(dag: ProofDag.Dag, problemFormulas: Seq[TPTP.AnnotatedFormula], allowAxiomMismatch: Boolean): Unit = {
-        //Throw an exception if any of the checks fail, otherwise print success message
-        if(!checkAllEdgesReferToExistingNodes(dag)) {
-            throw new ProofErrorException("Not all edges in the proof DAG refer to existing nodes")
-        }
-
-        if (!checkAcyclicity(dag)) {
-            throw new ProofErrorException("Proof DAG is not acyclic")
-        }
-        if(!checkAllSourcesAreAxiomsOrConjectures(dag)) {
-            throw new ProofErrorException("Not all sources in the proof DAG are axioms, conjectures, or negated conjectures")
-        }
-
-        if(!checkAllNegatedConjecturesAreCTH(dag)) {
-            throw new ProofErrorException("Not all negated conjectures in the proof DAG are CTH")
-        }
-
-        if(!checkAllNegatedConjectureHaveConjectureParent(dag)) {
-            throw new ProofErrorException("Not all negated conjectures in the proof DAG have a conjecture parent")
-        }
-
-        if(!checkAllInferencesHaveParents(dag)) {
-            throw new ProofErrorException("Not all inferences in the proof DAG have parents") 
-        }
-        if(!checkAllConnectedSinksAreFalse(dag)) {
-            throw new ProofErrorException("Not all connected sinks in the proof DAG are false")
-        }   
-        if(!checkConjectureIsNotUsedAsPremise(dag)) {
-            throw new ProofErrorException("Conjecture is used as a premise in the proof DAG")
-        }
-        if(!checkIfEveryAxiomHasFileParentAnnotation(dag)) {
-            throw new ProofErrorException("Not every axiom in the proof DAG has a file parent annotation")
-        }
-        if(!checkSkolemizationStepBasics(dag)) {
-            throw new ProofErrorException("Skolemization steps in the proof DAG do not meet formatting requirements")
-        }
+        checkAllEdgesReferToExistingNodes(dag)
+        checkAcyclicity(dag)
+        checkAllSourcesAreAxiomsOrConjectures(dag)
+        checkAllNegatedConjecturesAreCTH(dag)
+        checkAllNegatedConjectureHaveConjectureParent(dag)
+        checkAllInferencesHaveParents(dag)
+        checkAllConnectedSinksAreFalse(dag)
+        checkConjectureIsNotUsedAsPremise(dag)
+        checkIfEveryAxiomHasFileParentAnnotation(dag)
+        checkSkolemizationStepBasics(dag)
         checkESAIsSupported(dag)
         Logger.println("Checking input problem formulas...")
         if(!allowAxiomMismatch) {
-            if(!checkInputProblemIsSameAsProof(dag, problemFormulas)) {
-                throw new ProofErrorException("Input problem formulas do not match the formulas in the proof DAG")
-            }
+            checkInputProblemIsSameAsProof(dag, problemFormulas)
         }
     }
     
