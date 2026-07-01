@@ -14,8 +14,11 @@ object LeanRunner {
     val compileDir = Path.of(baseDir, "build")
 
     if (Files.exists(compileDir)) {
-      Logger.println(s"Cleaning up existing compile directory: ${compileDir.toAbsolutePath.toString}")
-      Files.walk(compileDir)
+      Logger.println(
+        s"Cleaning up existing compile directory: ${compileDir.toAbsolutePath.toString}"
+      )
+      Files
+        .walk(compileDir)
         .sorted(java.util.Comparator.reverseOrder())
         .forEach(path => Files.delete(path))
       Files.createDirectories(compileDir)
@@ -52,17 +55,23 @@ object LeanRunner {
               "-j",
               "1",
               "-o",
-              Path.of(
-                compileDir.toString,
-                batchFile.getFileName().toString().stripSuffix(".lean") + ".olean"
-              ).toString,
+              Path
+                .of(
+                  compileDir.toString,
+                  batchFile
+                    .getFileName()
+                    .toString()
+                    .stripSuffix(".lean") + ".olean"
+                )
+                .toString,
               "-R",
               baseDir,
               batchFile.toString()
             ),
             "",
             Map(
-              "LEAN_PATH" -> (leanLibraryPath + ":" + compileDir.toAbsolutePath.toString())
+              "LEAN_PATH" -> (leanLibraryPath + ":" + compileDir.toAbsolutePath
+                .toString())
             )
           )
           JobScheduler.runFuture(leanCompileBatch)
@@ -72,7 +81,9 @@ object LeanRunner {
           if (batchResults.forall(_.exitCode == 0)) {
             Logger.println("All batch files compiled successfully.")
           } else {
-            Logger.println("Some batch files failed to compile. Check the output for details.")
+            Logger.println(
+              "Some batch files failed to compile. Check the output for details."
+            )
           }
 
           val leanCompileFullProof = JobScheduler.JobSpec(
@@ -88,7 +99,8 @@ object LeanRunner {
             ),
             "",
             Map(
-              "LEAN_PATH" -> (leanLibraryPath + ":" + compileDir.toAbsolutePath.toString())
+              "LEAN_PATH" -> (leanLibraryPath + ":" + compileDir.toAbsolutePath
+                .toString())
             )
           )
 

@@ -1,12 +1,12 @@
 object Logger {
   private var verbosity: Int = 0
 
-  //define verbosity levels
+  // define verbosity levels
   val VERBOSITY_NONE: Int = 0
   val VERBOSITY_LOW: Int = 1
   val VERBOSITY_MEDIUM: Int = 2
   val VERBOSITY_HIGH: Int = 3
-  
+
   def setVerbose(verbose: Int): Unit = {
     verbosity = verbose
   }

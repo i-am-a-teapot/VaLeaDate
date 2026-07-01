@@ -172,7 +172,7 @@ object Main {
           settings.tptpDirectory = config.tptpDirectory
         val timeout = config.timeout.seconds
         val watcher = new Timer(true)
-        try{
+        try {
           watcher.schedule(
             new TimerTask {
               def run(): Unit = {
@@ -185,8 +185,7 @@ object Main {
           )
           runConfigurationChecks(settings, config)
           run(config)
-        }
-        finally {
+        } finally {
           watcher.cancel()
         }
       case _ =>
@@ -281,18 +280,17 @@ object Main {
     }
   }
 
-  
-
   private def addInferencesIfSyntacticMismatch(
       dag: ProofDag.Dag,
       problemFormulas: Seq[TPTP.AnnotatedFormula],
       allowSyntacticMismatchOfAxioms: Boolean
   ): (ProofDag.Dag, Seq[TPTPProblemGenerator.Inference]) = {
-    val (updatedDag, newObligations) = ProofRewriter.addInferencesIfSyntacticMismatch(
-      dag,
-      problemFormulas,
-      allowSyntacticMismatchOfAxioms
-    )
+    val (updatedDag, newObligations) =
+      ProofRewriter.addInferencesIfSyntacticMismatch(
+        dag,
+        problemFormulas,
+        allowSyntacticMismatchOfAxioms
+      )
     (updatedDag, newObligations)
   }
 
@@ -316,15 +314,21 @@ object Main {
       )
     }
   }
-  
+
   def run(config: Config): Unit = {
     Logger.setVerbose(config.verbosity)
-    val executionContext = ExecutionContext.fromExecutorService(Executors.newFixedThreadPool(config.parallel))
+    val executionContext = ExecutionContext.fromExecutorService(
+      Executors.newFixedThreadPool(config.parallel)
+    )
     try {
       Logger.println(s"Reading input from: ${config.inputFile}")
       Logger.println("Parsing input proof file...")
       val proofPath = Paths.get(config.inputFile)
-      val proofFileBasePath = Option(proofPath.getParent).getOrElse(Paths.get(".")).toAbsolutePath.normalize.toString()
+      val proofFileBasePath = Option(proofPath.getParent)
+        .getOrElse(Paths.get("."))
+        .toAbsolutePath
+        .normalize
+        .toString()
       val proofFileName = proofPath.getFileName.toString
       val proofFormulas =
         loadAnnotatedFormulas(proofFileName, proofFileBasePath, settings)
@@ -363,7 +367,12 @@ object Main {
             loadAnnotatedFormulas(problemFile, proofFileBasePath, settings)
           problemFormulas = problemFormulas ++ formulas
           var translationJob =
-            TPTPProblemGenerator.buildVampireJobSpec(problemFile, proofFileBasePath, settings.vampireBinary, settings.tptpDirectory)
+            TPTPProblemGenerator.buildVampireJobSpec(
+              problemFile,
+              proofFileBasePath,
+              settings.vampireBinary,
+              settings.tptpDirectory
+            )
           translationJobs = translationJobs :+ translationJob
         }
       }
@@ -422,13 +431,22 @@ object Main {
       val theoremInferences = collectTheoremInferences(dag, config.assumeThm)
       Logger.print(theoremInferences.map(_.name).mkString(", "))
       val theoremCheckResultsFuture =
-        JobScheduler.runNodes(theoremInferences)( x =>
-          TPTPProblemGenerator.buildTheoremCheckJobSpec(x, settings.vampireBinary, settings.tptpDirectory)
+        JobScheduler.runNodes(theoremInferences)(x =>
+          TPTPProblemGenerator.buildTheoremCheckJobSpec(
+            x,
+            settings.vampireBinary,
+            settings.tptpDirectory
+          )
         )(executionContext)
       val additionalObligationCheckResultsFuture = JobScheduler.runNodes(
         additionalProofObligations
       )(x =>
-          TPTPProblemGenerator.buildTheoremCheckJobSpec(x, settings.vampireBinary, settings.tptpDirectory))(executionContext)
+        TPTPProblemGenerator.buildTheoremCheckJobSpec(
+          x,
+          settings.vampireBinary,
+          settings.tptpDirectory
+        )
+      )(executionContext)
 
       val theoremCheckResults = Await.result(
         theoremCheckResultsFuture,
@@ -505,20 +523,24 @@ object Main {
       }
 
       var compiledWithMultipleFiles = config.compileWithMultipleLeanFiles
-      val numTheoremNodes = theoremCheckResults.size+additionalObligationCheckResults.size
-      if(numTheoremNodes > config.autoSwitchToMultiThreshold){
-        Logger.println(s"Number of theorem nodes ($numTheoremNodes) exceeds auto-switch threshold")
+      val numTheoremNodes =
+        theoremCheckResults.size + additionalObligationCheckResults.size
+      if (numTheoremNodes > config.autoSwitchToMultiThreshold) {
+        Logger.println(
+          s"Number of theorem nodes ($numTheoremNodes) exceeds auto-switch threshold"
+        )
         Logger.println(s"Switching to compiling with multiple Lean files")
         compiledWithMultipleFiles = true
       }
       if (compiledWithMultipleFiles) {
         val outputDir: Path = if (config.pathForLeanOutput.isDefined) {
           var dir = Paths.get(config.pathForLeanOutput.get)
-          if(!Files.isDirectory(dir)){
+          if (!Files.isDirectory(dir)) {
             val filename = dir.getFileName()
-            //strip filename of extension and make it a directory
+            // strip filename of extension and make it a directory
             val dirName = filename.toString().split('.').head
-            dir = Option(dir.getParent).getOrElse(Paths.get(".")).resolve(dirName)
+            dir =
+              Option(dir.getParent).getOrElse(Paths.get(".")).resolve(dirName)
           }
           if (!Files.exists(dir)) {
             Files.createDirectories(dir)
@@ -537,10 +559,18 @@ object Main {
           usedParents,
           config.batchSizeLeanFiles
         )
-        if(config.verifyWithLean){
+        if (config.verifyWithLean) {
           Logger.println("Try compiling with lean...")
-          val leanCheckFuture = LeanRunner.compileMultipleFiles(files, config.parallel, settings.leanBinary, settings.leanLibraryPath)(executionContext)
-          val leanCheckOutput = Await.result(leanCheckFuture, scala.concurrent.duration.Duration.Inf)
+          val leanCheckFuture = LeanRunner.compileMultipleFiles(
+            files,
+            config.parallel,
+            settings.leanBinary,
+            settings.leanLibraryPath
+          )(executionContext)
+          val leanCheckOutput = Await.result(
+            leanCheckFuture,
+            scala.concurrent.duration.Duration.Inf
+          )
           LeanRunner.checkLeanResult(leanCheckOutput)
           if (config.pathForLeanOutput.isEmpty) {
             Logger.println("Deleting temporary output files...")
@@ -549,12 +579,12 @@ object Main {
         }
       } else {
         val outputFile: Path = if (config.pathForLeanOutput.isDefined) {
-          
+
           Paths.get(config.pathForLeanOutput.get)
         } else {
           Files.createTempFile("lean_output_", ".lean")
         }
-        
+
         LeanFullProofPrinter.writeLeanOutputFile(
           outputFile,
           translatedVariables,
@@ -565,8 +595,16 @@ object Main {
           usedParents
         )
         if (config.verifyWithLean) {
-          val leanCheckFuture = LeanRunner.runLeanCheck(outputFile, config.parallel, settings.leanBinary, settings.leanLibraryPath)(executionContext)
-          val leanCheckResult = Await.result(leanCheckFuture, scala.concurrent.duration.Duration.Inf)
+          val leanCheckFuture = LeanRunner.runLeanCheck(
+            outputFile,
+            config.parallel,
+            settings.leanBinary,
+            settings.leanLibraryPath
+          )(executionContext)
+          val leanCheckResult = Await.result(
+            leanCheckFuture,
+            scala.concurrent.duration.Duration.Inf
+          )
           if (config.pathForLeanOutput.isEmpty) {
             Files.delete(outputFile)
           }
@@ -584,7 +622,9 @@ object Main {
       case e: Exception =>
         println(s"%SZS status Unknown : ${e.getMessage}")
     } finally {
-      Logger.println("Shutting down execution context and killing child processes...")
+      Logger.println(
+        "Shutting down execution context and killing child processes..."
+      )
       executionContext.shutdownNow()
       killChildProcesses()
       executionContext.close()
