@@ -47,7 +47,7 @@ object LeanRunner {
       if (dataResult.exitCode != 0) {
         Future.successful(dataResult)
       } else {
-        Logger.println("First file compiled, now compiling batch files...")
+        Logger.println("First file compiled, now compiling batched files...")
         val compileBatchFutures = batchFiles.map { batchFile =>
           val leanCompileBatch = JobScheduler.JobSpec(
             Seq(

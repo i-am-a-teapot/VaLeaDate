@@ -31,7 +31,6 @@ object TranslationResult {
     val inputFormulaLines =
       inputFormulas.split("\n").map(_.trim).filter(_.nonEmpty)
 
-    Logger.println(inputFormulaLines.mkString("\n"))
     val formulasByIndex: Map[String, String] = inputFormulaLines
       .grouped(2)
       .collect {

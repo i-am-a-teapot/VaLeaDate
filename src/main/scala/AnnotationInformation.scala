@@ -251,8 +251,6 @@ final object AnnotationInformationHelpers {
   def getInformationFromAnnotation(
       annotation: TPTP.Annotations
   ): Option[AnnotationInformation] = {
-    Logger.println("Inferences list")
-
     if (annotation.isEmpty) {
       Logger.println("No annotation found")
       return None

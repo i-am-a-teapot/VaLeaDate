@@ -218,14 +218,17 @@ set_option maxRecDepth 100000000""")
     writer.println("variable [Inhabited Data.ι]")
     writer.close();
     var batchNumber = 0
-    var currentBatchSize = batchingSize + 1
+    var currentBatchSize = batchingSize + 1 // force first batch to be created
+    var currentFileSize = batchingSize + 1 // force first batch to be created
     var outputFiles = Seq.empty[Path]
     for (
       (node, result) <- theoremCheckResults ++ additionalObligationCheckResults
     ) {
-      if (currentBatchSize >= batchingSize) {
+      if (currentFileSize > batchingSize) {
+        Logger.println("Create new file...", Logger.VERBOSITY_MEDIUM)
         batchNumber += 1
         currentBatchSize = 0
+        currentFileSize = 0
         writer.close()
         val path = outputDir.resolve("batch" + batchNumber.toString + ".lean")
         outputFiles = outputFiles :+ path
@@ -244,9 +247,11 @@ set_option maxRecDepth 100000000""")
           writer.println(s" : ${List.fill(arity)("ι →").mkString} ι}")
         }
       }
+      Logger.println("Writing Lean node " + node + " to file...", Logger.VERBOSITY_MEDIUM)
       writer.write("namespace " + node + "\n")
       writer.write(result.stdout)
       writer.write("end " + node + "\n")
+      currentFileSize += result.stdout.length
       currentBatchSize += 1
     }
     writer.close()

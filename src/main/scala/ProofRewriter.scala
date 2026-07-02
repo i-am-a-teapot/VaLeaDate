@@ -24,7 +24,7 @@ object ProofRewriter {
     if (isSyntacticallyEqual) {
       (dag, Seq.empty)
     } else {
-      Logger.println("Syntactic mismatch found for axiom node " + nodeName)
+      Logger.println("Syntactic mismatch found for axiom node: " + nodeName)
       val replacementNodeName = nodeName + "_inputTransf"
       val replacementFormula =
         problemFormula match {
@@ -74,9 +74,7 @@ object ProofRewriter {
       updatedNodes = updatedNodes + (replacementNodeName -> replacementNode)
 
       val updatedDag = ProofDag.Dag(updatedNodes)
-      Logger.println(
-        s"Adding node: ${replacementNodeName} -> ${nodeName} to list"
-      )
+
       (updatedDag, Seq(newObligation))
     }
   }

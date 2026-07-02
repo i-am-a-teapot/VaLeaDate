@@ -43,8 +43,9 @@ object Main {
       treatNegatedConjectureAsAxiom: Boolean = false,
       allowSyntacticMismatchOfAxioms: Boolean = false,
       compileWithMultipleLeanFiles: Boolean = false,
-      autoSwitchToMultiThreshold: Int = 100,
-      batchSizeLeanFiles: Int = 16
+      autoSwitchToMultiThresholdSetManually: Boolean = false,
+      autoSwitchToMultiThreshold: Int = 64 * 1024 * 8,
+      batchSizeLeanFiles: Int = 64 * 1024
   )
 
   private val settings: Settings = Settings();
@@ -149,12 +150,19 @@ object Main {
           .action((_, c) => c.copy(compileWithMultipleLeanFiles = true))
           .text("compile Lean output with multiple files instead of one file"),
         opt[Int]("batch-size")
-          .action((x, c) => c.copy(batchSizeLeanFiles = x))
-          .text("batch size for Lean files when compiling with multiple files"),
-        opt[Int]("auto-switch-to-multi-threshold")
-          .action((x, c) => c.copy(autoSwitchToMultiThreshold = x))
+          .action((x, c) => c.copy(batchSizeLeanFiles = x * 1024))
           .text(
-            "if the number of theorem nodes exceeds this threshold, automatically switch to compiling with multiple Lean files (default: 100)"
+            "batch size (in kiB) for Lean files when compiling with multiple files"
+          ),
+        opt[Int]("auto-switch-to-multi-threshold")
+          .action((x, c) => {
+            c.copy(
+              autoSwitchToMultiThreshold = x * 1024,
+              autoSwitchToMultiThresholdSetManually = true
+            )
+          })
+          .text(
+            "if the combined size (in kiB) of theorem outputs exceeds this threshold, automatically switch to compiling with multiple Lean files (default: batch-size*parallel)"
           ),
         help("help")
           .text("print this help message")
@@ -163,14 +171,20 @@ object Main {
 
     OParser.parse(parser, args, Config()) match {
       case Some(config) =>
-        if (config.leanBinary.nonEmpty) settings.leanBinary = config.leanBinary
-        if (config.vampireBinary.nonEmpty)
-          settings.vampireBinary = config.vampireBinary
-        if (config.leanLibraryPath.nonEmpty)
-          settings.leanLibraryPath = config.leanLibraryPath
-        if (config.tptpDirectory.nonEmpty)
-          settings.tptpDirectory = config.tptpDirectory
-        val timeout = config.timeout.seconds
+        val conf = if (!config.autoSwitchToMultiThresholdSetManually) {
+          config.copy(autoSwitchToMultiThreshold =
+            config.batchSizeLeanFiles * config.parallel
+          )
+        } else { config }
+
+        if (conf.leanBinary.nonEmpty) settings.leanBinary = conf.leanBinary
+        if (conf.vampireBinary.nonEmpty)
+          settings.vampireBinary = conf.vampireBinary
+        if (conf.leanLibraryPath.nonEmpty)
+          settings.leanLibraryPath = conf.leanLibraryPath
+        if (conf.tptpDirectory.nonEmpty)
+          settings.tptpDirectory = conf.tptpDirectory
+        val timeout = conf.timeout.seconds
         val watcher = new Timer(true)
         try {
           watcher.schedule(
@@ -183,8 +197,8 @@ object Main {
             },
             timeout.toMillis
           )
-          runConfigurationChecks(settings, config)
-          run(config)
+          runConfigurationChecks(settings, conf)
+          run(conf)
         } finally {
           watcher.cancel()
         }
@@ -391,7 +405,7 @@ object Main {
       Logger.println("Extracting skolemization details from proof DAG...")
       val skolemFunctionArities =
         SkolemizationGeneration.checkSkolemizationDetailsAreConsistent(dag)
-      Logger.println(skolemFunctionArities)
+
       val translationResult = Await.result(
         translationResultsFuture,
         scala.concurrent.duration.Duration.Inf
@@ -429,7 +443,9 @@ object Main {
       }
 
       val theoremInferences = collectTheoremInferences(dag, config.assumeThm)
-      Logger.print(theoremInferences.map(_.name).mkString(", "))
+      Logger.println(
+        "Checking ${theoremInferences.size} theorem inferences with Vampire..."
+      )
       val theoremCheckResultsFuture =
         JobScheduler.runNodes(theoremInferences)(x =>
           TPTPProblemGenerator.buildTheoremCheckJobSpec(
@@ -518,19 +534,24 @@ object Main {
         )
       }
 
+      Logger.println("Assembling Lean input file(s)...")
+
       val usedParents = theoremCheckResults.map { case (name, result) =>
         name -> result.usedParents
       }
 
       var compiledWithMultipleFiles = config.compileWithMultipleLeanFiles
+      val combinedFileSize = theoremCheckResults.values.map(_.stdout.length).sum
       val numTheoremNodes =
         theoremCheckResults.size + additionalObligationCheckResults.size
-      if (numTheoremNodes > config.autoSwitchToMultiThreshold) {
-        Logger.println(
-          s"Number of theorem nodes ($numTheoremNodes) exceeds auto-switch threshold"
-        )
-        Logger.println(s"Switching to compiling with multiple Lean files")
-        compiledWithMultipleFiles = true
+      if (combinedFileSize > config.autoSwitchToMultiThreshold) {
+        if (config.parallel > 1) {
+          Logger.println(
+            s"Combined size of theorem outputs ($combinedFileSize) exceeds auto-switch threshold"
+          )
+          Logger.println(s"Switching to compiling with multiple Lean files")
+          compiledWithMultipleFiles = true
+        }
       }
       if (compiledWithMultipleFiles) {
         val outputDir: Path = if (config.pathForLeanOutput.isDefined) {
@@ -560,7 +581,7 @@ object Main {
           config.batchSizeLeanFiles
         )
         if (config.verifyWithLean) {
-          Logger.println("Try compiling with lean...")
+          Logger.println("Try checking with lean...")
           val leanCheckFuture = LeanRunner.compileMultipleFiles(
             files,
             config.parallel,

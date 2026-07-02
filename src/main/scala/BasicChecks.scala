@@ -421,18 +421,29 @@ object BasicChecks {
       problemFormulas: Seq[TPTP.AnnotatedFormula],
       allowAxiomMismatch: Boolean
   ): Unit = {
+    Logger.println("Checking all edges refer to existing nodes...")
     checkAllEdgesReferToExistingNodes(dag)
+    Logger.println("Checking acyclicity of the proof DAG...")
     checkAcyclicity(dag)
+    Logger.println("Checking all sources are axioms or conjectures...")
     checkAllSourcesAreAxiomsOrConjectures(dag)
+    Logger.println("Checking all negated conjectures are CTH...")
     checkAllNegatedConjecturesAreCTH(dag)
+    Logger.println("Checking negated conjectures have conjecture parents...")
     checkAllNegatedConjectureHaveConjectureParent(dag)
+    Logger.println("Checking all inferences have parents...")
     checkAllInferencesHaveParents(dag)
+    Logger.println("Checking all connected sinks are false...")
     checkAllConnectedSinksAreFalse(dag)
+    Logger.println("Checking conjecture is not used as premise...")
     checkConjectureIsNotUsedAsPremise(dag)
+    Logger.println("Checking if every axiom has a file parent annotation...")
     checkIfEveryAxiomHasFileParentAnnotation(dag)
+    Logger.println("Smoke testing skolemization step ...")
     checkSkolemizationStepBasics(dag)
+    Logger.println("Checking if every ESA step is supported...")
     checkESAIsSupported(dag)
-    Logger.println("Checking input problem formulas...")
+    Logger.println("Checking alpha-equivalence of problem formulas...")
     if (!allowAxiomMismatch) {
       checkInputProblemIsSameAsProof(dag, problemFormulas)
     }

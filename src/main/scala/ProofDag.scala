@@ -154,7 +154,7 @@ object ProofDag {
         )
       val name = AnnotatedFormulaHelpers.sanitizeName(nameOpt.get)
 
-      Logger.println(s"Processing step $name")
+      Logger.println(s"Processing step $name", Logger.VERBOSITY_MEDIUM)
 
       val annotations =
         AnnotationInformationHelpers.getInformationFromAnnotation(
@@ -162,7 +162,7 @@ object ProofDag {
         )
       Logger.println(
         s"Step $name has additional information: $annotations",
-        Logger.VERBOSITY_LOW
+        Logger.VERBOSITY_MEDIUM
       )
       val roleOpt = stepRole(step)
       if (roleOpt.isEmpty) {
