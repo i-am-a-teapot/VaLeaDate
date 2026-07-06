@@ -114,6 +114,8 @@ object AnnotatedFormulaHelpers {
             connective match {
               case TPTP.FOF.| => TPTP.FOF.BinaryFormula(TPTP.FOF.&, newLeft, newRight)
               case TPTP.FOF.& => TPTP.FOF.BinaryFormula(TPTP.FOF.|, newLeft, newRight)
+              case TPTP.FOF.~& => TPTP.FOF.BinaryFormula(TPTP.FOF.&, left, right)
+              case TPTP.FOF.~| => TPTP.FOF.BinaryFormula(TPTP.FOF.|, left, right)
               case TPTP.FOF.Impl => TPTP.FOF.BinaryFormula(TPTP.FOF.&, left, newRight)
               case TPTP.FOF.<= => TPTP.FOF.BinaryFormula(TPTP.FOF.&, newLeft, right)
               case TPTP.FOF.<=> => TPTP.FOF.BinaryFormula(TPTP.FOF.|, TPTP.FOF.BinaryFormula(TPTP.FOF.&, left, newRight), TPTP.FOF.BinaryFormula(TPTP.FOF.&, newLeft, right))
