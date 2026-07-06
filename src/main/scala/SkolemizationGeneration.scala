@@ -1,6 +1,7 @@
 import leo.datastructures.TPTP
 import leo.datastructures.TPTP.FOF
 import java.io.PrintWriter
+import scala.collection.mutable.LinkedHashSet
 
 object SkolemizationGeneration {
 
@@ -43,13 +44,13 @@ object SkolemizationGeneration {
       s"  have step_$resultStepName : ${LeanPrettyPrinter.prettyLeanFOFFormula(outputFormula)} := by (first | exact step_$resultStepName' | clearExcept step_$resultStepName'; simp_all | clearExcept step_$resultStepName'; grind only)"
     )
   }
-
+  
   def findBoundVariablesUpToExistential(
       formula: FOF.Formula,
       skolemizedVariable: String
-  ): (Set[String], Option[FOF.Formula]) = {
+  ): (LinkedHashSet[String], Option[FOF.Formula]) = {
     formula match {
-      case TPTP.FOF.AtomicFormula(f, args) => (Set.empty[String], None)
+      case TPTP.FOF.AtomicFormula(f, args) => (LinkedHashSet.empty[String], None)
       case TPTP.FOF.QuantifiedFormula(q, variables, body) => {
         if (q == TPTP.FOF.!) {
           val (boundVars, exists) =
@@ -57,7 +58,7 @@ object SkolemizationGeneration {
           return (boundVars ++ variables, exists)
         } else {
           if (variables.exists(_ == skolemizedVariable)) {
-            return (Set.empty[String], Some(formula))
+            return (LinkedHashSet.empty[String], Some(formula))
           } else {
             return findBoundVariablesUpToExistential(body, skolemizedVariable)
           }
@@ -80,8 +81,66 @@ object SkolemizationGeneration {
           }
         }
       }
-      case TPTP.FOF.Equality(left, right)   => (Set.empty[String], None)
-      case TPTP.FOF.Inequality(left, right) => (Set.empty[String], None)
+      case TPTP.FOF.Equality(left, right)   => (LinkedHashSet.empty[String], None)
+      case TPTP.FOF.Inequality(left, right) => (LinkedHashSet.empty[String], None)
+    }
+  }
+
+  def skolemizeFormulaWithSingleVariable(formula: TPTP.FOF.Formula, skolemizedVariable: String, skolemFunctionName: String, dependentVariables: Seq[String]): TPTP.FOF.Formula = {
+    
+    val (boundVars, exists) = findBoundVariablesUpToExistential(formula, skolemizedVariable)
+
+    val skolemFunction = TPTP.FOF.AtomicTerm(
+      skolemFunctionName,
+      boundVars.toSeq.map(v => TPTP.FOF.Variable(v))
+    )
+    val skolemFormula = replaceVarWithTermAndDelQuant(formula, skolemizedVariable, skolemFunction)
+    skolemFormula
+  }
+
+  def replaceVarWithTermAndDelQuant(formula: TPTP.FOF.Formula, variable: String, term: FOF.Term): TPTP.FOF.Formula = {
+    formula match {
+      case TPTP.FOF.AtomicFormula(f, args) =>
+        TPTP.FOF.AtomicFormula(f, args.map(arg => replaceVArWithTermAndDelQuant(arg, variable, term)))
+      case TPTP.FOF.QuantifiedFormula(q, variables, body) =>
+        if (variables.contains(variable)) {
+          if(variables.size == 1){
+            //remove the quantifier
+            replaceVarWithTermAndDelQuant(body, variable, term)
+          } else {
+            //remove the variable from the quantifier
+            TPTP.FOF.QuantifiedFormula(q, variables.filterNot(_ == variable), replaceVarWithTermAndDelQuant(body, variable, term))
+          }
+        } else {
+          TPTP.FOF.QuantifiedFormula(q, variables, replaceVarWithTermAndDelQuant(body, variable, term))
+        }
+      case TPTP.FOF.UnaryFormula(connective, body) =>
+        TPTP.FOF.UnaryFormula(connective, replaceVarWithTermAndDelQuant(body, variable, term))
+      case TPTP.FOF.BinaryFormula(connective, left, right) =>
+        TPTP.FOF.BinaryFormula(connective,
+          replaceVarWithTermAndDelQuant(left, variable, term),
+          replaceVarWithTermAndDelQuant(right, variable, term)
+        )
+      case TPTP.FOF.Equality(left, right) =>
+        TPTP.FOF.Equality(
+          replaceVArWithTermAndDelQuant(left, variable, term),
+          replaceVArWithTermAndDelQuant(right, variable, term)
+        )
+      case TPTP.FOF.Inequality(left, right) =>
+        TPTP.FOF.Inequality(
+          replaceVArWithTermAndDelQuant(left, variable, term),
+          replaceVArWithTermAndDelQuant(right, variable, term)
+        )
+    }
+  }
+  def replaceVArWithTermAndDelQuant(term: TPTP.FOF.Term, variable: String, replacement: TPTP.FOF.Term): TPTP.FOF.Term = {
+    term match {
+      case TPTP.FOF.AtomicTerm(f, args) =>
+        TPTP.FOF.AtomicTerm(f, args.map(arg => replaceVArWithTermAndDelQuant(arg, variable, replacement)))
+      case TPTP.FOF.NumberTerm(n) => term
+      case TPTP.FOF.Variable(v) =>
+        if (v == variable) replacement else term
+      case x@TPTP.FOF.DistinctObject(str) => x
     }
   }
 

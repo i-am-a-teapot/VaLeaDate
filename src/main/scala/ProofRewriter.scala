@@ -1,4 +1,5 @@
 import leo.datastructures.TPTP
+import scala.collection.mutable
 object ProofRewriter {
 
   // Returns (updatedDag, newObligations)
@@ -161,6 +162,120 @@ object ProofRewriter {
     }
   }
 
+  def rewriteSkolemizationInferencesIfNotEqToSkol(
+      dag: ProofDag.Dag,
+      nodeName: String
+  ): (ProofDag.Dag, Map[String, String]) = {
+    var newNameForSkolemNodeMap: Map[String, String] = Map.empty
+    // First add a skolemization transformation step to nnf, then skolemize the nnf and add the skolemization step to the dag
+    var currentDag = dag
+    var node = currentDag.nodes(nodeName)
+    var parentName = node.parents.head
+    var parentNode = currentDag.nodes(parentName)
+    Logger.println(
+      s"Checking skolemization details for node $nodeName with parent $parentName"
+    )
+    var skolemizationInfo =
+      AnnotationInformationHelpers.getSkolemizationInformation(
+        node.additionalInfo
+      )
+    var formula = node.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula
+    var parentFormula =
+      parentNode.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula
+    if (!AnnotatedFormulaHelpers.checkFormulaIsInNNF(parentFormula)) {
+      Logger.println(
+        s"Parent formula $parentName for node $nodeName is not in NNF, adding NNF transformation step"
+      )
+      val nnfFormula =
+        AnnotatedFormulaHelpers.transformFormulaToNNF(parentFormula)
+      val preTransformNodeName = parentName + "_pre_nnf"
+      val rewrittenParent = parentNode.copy(
+        role = "plain",
+        formula = TPTP.FOFAnnotated(
+          parentName,
+          "plain",
+          TPTP.FOF.Logical(nnfFormula),
+          None
+        ),
+        additionalInfo = InferenceInformation(
+          "thm",
+          "thm",
+          Seq(NamedParentInformation(preTransformNodeName))
+        )
+      )
+      val newParentNode = parentNode.copy(
+        name = preTransformNodeName,
+        formula = TPTP.FOFAnnotated(
+          preTransformNodeName,
+          "plain",
+          TPTP.FOF.Logical(parentFormula),
+          None
+        )
+      )
+      var updatedNodes = currentDag.nodes
+      updatedNodes = updatedNodes.updated(parentName, rewrittenParent)
+      updatedNodes = updatedNodes + (preTransformNodeName -> newParentNode)
+      newNameForSkolemNodeMap =
+        newNameForSkolemNodeMap ++ Map(parentName -> preTransformNodeName)
+      currentDag = ProofDag.Dag(updatedNodes)
+    }
+    // Try to skolemize the formula:
+
+    parentName = node.parents.head
+    parentNode = currentDag.nodes(parentName)
+    parentFormula =
+      parentNode.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula
+    skolemizationInfo =
+      AnnotationInformationHelpers.getSkolemizationInformation(
+        node.additionalInfo
+      )
+    val skolemizedVariable = skolemizationInfo.skolemDefinitions.head._1
+    val skolemizedFunName = skolemizationInfo.skolemDefinitions.head._2
+    val skolemizedFunVars = skolemizationInfo.skolemDefinitions.head._3
+    val skolemizedParentFormula =
+      SkolemizationGeneration.skolemizeFormulaWithSingleVariable(
+        parentFormula,
+        skolemizedVariable,
+        skolemizedFunName,
+        skolemizedFunVars
+      )
+
+    if (
+      !AlphaEquivalenceChecker.checkAlphaEquivalence(
+        skolemizedParentFormula,
+        formula
+      )
+    ) {
+      Logger.println(
+        s"Formula after skolemization for node $nodeName is not alpha equivalent, adding transformation to nnf step"
+      )
+      val newParentName = parentName + "_skolemized"
+      val rewrittenNode = node.copy(
+        additionalInfo = InferenceInformation(
+          "thm",
+          "thm",
+          Seq(NamedParentInformation(newParentName))
+        )
+      )
+      val newSkolemizationNode = node.copy(
+        name = newParentName,
+        formula = TPTP.FOFAnnotated(
+          newParentName,
+          "plain",
+          TPTP.FOF.Logical(skolemizedParentFormula),
+          None
+        )
+      )
+      var updatedNodes = currentDag.nodes
+      updatedNodes = updatedNodes.updated(nodeName, rewrittenNode)
+      updatedNodes = updatedNodes + (newParentName -> newSkolemizationNode)
+      newNameForSkolemNodeMap =
+        newNameForSkolemNodeMap ++ Map(nodeName -> newParentName)
+      currentDag = ProofDag.Dag(updatedNodes)
+    }
+    return (currentDag, newNameForSkolemNodeMap)
+  }
+
   def addInferencesIfSyntacticMismatch(
       dag: ProofDag.Dag,
       problemFormulas: Seq[TPTP.AnnotatedFormula],
@@ -189,7 +304,25 @@ object ProofRewriter {
       currentDag = updatedDag
       obligations = obligations ++ newObs
     }
+    var newNodeNameMap: Map[String, String] = Map.empty
+    for (
+      nodeName <- currentDag.nodes
+        .filter({ case (_, node) =>
+          AnnotationInformationHelpers.containsRuleStep(
+            "skolemize",
+            node.additionalInfo
+          )
+        })
+        .keys
+    ) {
 
+      val (newDag, nodeNameMap) = rewriteSkolemizationInferencesIfNotEqToSkol(
+        currentDag,
+        newNodeNameMap.getOrElse(nodeName, nodeName)
+      )
+      currentDag = newDag;
+      newNodeNameMap = newNodeNameMap ++ nodeNameMap
+    }
     (currentDag, obligations)
   }
 

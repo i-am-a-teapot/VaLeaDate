@@ -444,7 +444,7 @@ object Main {
 
       val theoremInferences = collectTheoremInferences(dag, config.assumeThm)
       Logger.println(
-        "Checking ${theoremInferences.size} theorem inferences with Vampire..."
+        s"Checking ${theoremInferences.size} theorem inferences with Vampire..."
       )
       val theoremCheckResultsFuture =
         JobScheduler.runNodes(theoremInferences)(x =>

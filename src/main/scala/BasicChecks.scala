@@ -323,7 +323,7 @@ object BasicChecks {
             function == sym
           }
         }
-        val fofFormula = node.formula match {
+        var fofFormula = node.formula match {
           case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(form), _) => form
           case TPTP.CNFAnnotated(_, _, form, _)                   =>
             TPTPProblemGenerator
@@ -342,7 +342,7 @@ object BasicChecks {
           )
         }
 
-        val fofParent = node.parents.headOption match {
+        var fofParent = node.parents.headOption match {
           case Some(parentName) =>
             dag.nodes.get(parentName) match {
               case Some(parentNode) =>
@@ -369,10 +369,12 @@ object BasicChecks {
               s"Skolemization step ${node.name} does not have a parent"
             )
         }
+      
         if (!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofParent)) {
-          throw new ProofUnsureException(
-            s"Parent formula of skolemization step ${node.name} is not in NNF"
-          )
+          fofParent = AnnotatedFormulaHelpers.transformFormulaToNNF(fofParent)    
+        }
+        if(!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofFormula)) {
+          fofFormula = AnnotatedFormulaHelpers.transformFormulaToNNF(fofFormula)
         }
         val exQuantVariablesParent = AnnotatedFormulaHelpers
           .collectQuantifiedFormulaVariables(fofParent, TPTP.FOF.?)

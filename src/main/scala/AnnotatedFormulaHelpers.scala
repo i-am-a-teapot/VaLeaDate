@@ -93,4 +93,41 @@ object AnnotatedFormulaHelpers {
       case TPTP.FOF.Inequality(_, _) => true
     }
   }
+
+  def transformFormulaToNNF(formula: TPTP.FOF.Formula) : TPTP.FOF.Formula = {
+    formula match {
+      case TPTP.FOF.AtomicFormula(_, _)            => formula
+      case TPTP.FOF.QuantifiedFormula(q, vars, body) =>
+        TPTP.FOF.QuantifiedFormula(q, vars, transformFormulaToNNF(body))
+      case TPTP.FOF.UnaryFormula(TPTP.FOF.~, body) =>
+        body match {
+          case TPTP.FOF.AtomicFormula(_, _)        => formula
+          case TPTP.FOF.QuantifiedFormula(q, vars, b) =>
+            val newQuant = if (q == TPTP.FOF.!) TPTP.FOF.? else TPTP.FOF.!
+            val newBody = transformFormulaToNNF(TPTP.FOF.UnaryFormula(TPTP.FOF.~, b))
+            TPTP.FOF.QuantifiedFormula(newQuant, vars, newBody)
+          case TPTP.FOF.UnaryFormula(TPTP.FOF.~ , b) =>
+            transformFormulaToNNF(b)
+          case TPTP.FOF.BinaryFormula(connective, left, right) =>
+            val newLeft = transformFormulaToNNF(TPTP.FOF.UnaryFormula(TPTP.FOF.~ , left))
+            val newRight = transformFormulaToNNF(TPTP.FOF.UnaryFormula(TPTP.FOF.~ , right))
+            connective match {
+              case TPTP.FOF.| => TPTP.FOF.BinaryFormula(TPTP.FOF.&, newLeft, newRight)
+              case TPTP.FOF.& => TPTP.FOF.BinaryFormula(TPTP.FOF.|, newLeft, newRight)
+              case TPTP.FOF.Impl => TPTP.FOF.BinaryFormula(TPTP.FOF.&, left, newRight)
+              case TPTP.FOF.<= => TPTP.FOF.BinaryFormula(TPTP.FOF.&, newLeft, right)
+              case TPTP.FOF.<=> => TPTP.FOF.BinaryFormula(TPTP.FOF.|, TPTP.FOF.BinaryFormula(TPTP.FOF.&, left, newRight), TPTP.FOF.BinaryFormula(TPTP.FOF.&, newLeft, right))
+              case TPTP.FOF.<~> => TPTP.FOF.BinaryFormula(TPTP.FOF.|, TPTP.FOF.BinaryFormula(TPTP.FOF.&, left, right), TPTP.FOF.BinaryFormula(TPTP.FOF.&, newLeft, newRight))
+            }
+          case TPTP.FOF.Equality(_, _)   => formula
+          case TPTP.FOF.Inequality(_, _) => formula
+        }
+      case TPTP.FOF.BinaryFormula(connective, left, right) =>
+        val newLeft = transformFormulaToNNF(left)
+        val newRight = transformFormulaToNNF(right)
+        TPTP.FOF.BinaryFormula(connective, newLeft, newRight)
+      case TPTP.FOF.Equality(_, _)   => formula
+      case TPTP.FOF.Inequality(_, _) => formula
+    }
+  }
 }
