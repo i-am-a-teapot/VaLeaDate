@@ -81,6 +81,7 @@ object LeanRunner {
           if (batchResults.forall(_.exitCode == 0)) {
             Logger.println("All batch files compiled successfully.")
           } else {
+            
             Logger.println(
               "Some batch files failed to compile. Check the output for details."
             )

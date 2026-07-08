@@ -62,6 +62,14 @@ set_option maxRecDepth 100000000""")
                 s"No new symbols found in skolemization details for node $nodeName"
               )
             }
+          val skolemFunctionArguments =
+            skolemizationDetails.skolemDefinitions.headOption
+              .map(_._3)
+              .getOrElse {
+                throw new ProofErrorException(
+                  s"No skolem function arguments found in details for node $nodeName"
+                )
+              }
           val resultStepName = node.name
           if (!node.formula.isInstanceOf[TPTP.FOFAnnotated]) {
             throw new ProofUnsureException(
@@ -74,6 +82,7 @@ set_option maxRecDepth 100000000""")
             parentFormula,
             skolemizedVariable,
             skolemFunctionName,
+            skolemFunctionArguments,
             resultStepName,
             node.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula
           )
@@ -174,12 +183,15 @@ set_option maxRecDepth 100000000""")
       writer.println("variable [Inhabited Data.ι]")
       val variablesByArity =
         introducedVariables.groupBy(_._2).view.mapValues(_.keys.toSeq)
+      if(!variablesByArity.isEmpty) {
+        writer.println("variable ")
+      }
       variablesByArity.foreach { case (arity, variables) =>
-        writer.print("variable {")
+        writer.print("  {")
         writer.print(
           variables.map(node => s"_${node.toString()}").mkString(" ")
         )
-        writer.println(s" : ${List.fill(arity)("ι →").mkString} ι}")
+        writer.println(s" : ${List.fill(arity)("ι→").mkString}ι}")
       }
       theoremCheckResults.foreach { case (node, result) =>
         writer.write("namespace " + node + "\n")

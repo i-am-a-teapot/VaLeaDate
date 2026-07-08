@@ -147,7 +147,8 @@ object TPTPProblemGenerator {
   final def buildTheoremCheckJobSpec(
       inference: Inference,
       vampireBinary: String,
-      tptpPath: String
+      tptpPath: String,
+      timeout: Int = 0
   ): JobScheduler.JobSpec = {
     val command = Seq(
       vampireBinary,
@@ -164,7 +165,7 @@ object TPTPProblemGenerator {
       "-wvo",
       "introduced_only",
       "-t",
-      "0"
+      timeout.toString
     )
     val problemText =
       TPTPProblemGenerator.generateProblemFromInference(inference)

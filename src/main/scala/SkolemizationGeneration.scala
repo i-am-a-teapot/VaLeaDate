@@ -15,11 +15,13 @@ object SkolemizationGeneration {
       inputFormula: FOF.Formula,
       variableToSkolemize: String,
       skolemFunctionName: String,
+      skolemFunctionArguments: Seq[String],
       resultStepName: String,
       outputFormula: FOF.Formula
   ): Unit = {
     val (boundVariables, foundVariable) =
       findBoundVariablesUpToExistential(inputFormula, variableToSkolemize)
+    
     if (foundVariable.isEmpty) {
       throw new ProofErrorException(
         s"Could not find existential variable $variableToSkolemize in formula for step $stepName"
@@ -36,9 +38,30 @@ object SkolemizationGeneration {
     writer.println(s"    rw [← exists'_eq_exists]")
     writer.println(s"  existspr_prenex at step_$stepName")
     writer.println(s"  simp only [exists'_eq_exists] at step_$stepName")
-    writer.println(
-      s"  let ⟨${renderSkolemFunctionName(skolemFunctionName)}, step_$resultStepName'⟩ := step_$stepName"
-    )
+
+    var switchedOrders = false
+    if (skolemFunctionArguments != boundVariables.toSeq) {
+      //check if they are the same set
+      if (skolemFunctionArguments.toSet != boundVariables.toSet) {
+        throw new ProofErrorException(
+          s"Skolem function arguments ${skolemFunctionArguments.mkString(", ")} are not the same as the bound variables ${boundVariables.mkString(", ")} for step $stepName"
+        )
+      } else {
+        switchedOrders = true
+      }
+    }
+    if(!switchedOrders){
+      writer.println(
+        s"  let ⟨${renderSkolemFunctionName(skolemFunctionName)}, step_$resultStepName'⟩ := step_$stepName"
+      )
+    } else {
+      writer.println(
+        s"  let ⟨${renderSkolemFunctionName(skolemFunctionName)}', step_$resultStepName'⟩ := step_$stepName"
+      )
+      writer.println(
+        s"  let ${renderSkolemFunctionName(skolemFunctionName)} := fun ${skolemFunctionArguments.mkString(" ")} => ${renderSkolemFunctionName(skolemFunctionName)}' ${boundVariables.mkString(" ")}"
+      )
+    }
     LeanPrettyPrinter.variablesAsTemplates = previousState
     writer.println(
       s"  have step_$resultStepName : ${LeanPrettyPrinter.prettyLeanFOFFormula(outputFormula)} := by (first | exact step_$resultStepName' | clearExcept step_$resultStepName'; simp_all | clearExcept step_$resultStepName'; grind only)"
@@ -55,7 +78,7 @@ object SkolemizationGeneration {
         if (q == TPTP.FOF.!) {
           val (boundVars, exists) =
             findBoundVariablesUpToExistential(body, skolemizedVariable)
-          return (boundVars ++ variables, exists)
+          return (LinkedHashSet.from(variables) ++ boundVars, exists)
         } else {
           if (variables.exists(_ == skolemizedVariable)) {
             return (LinkedHashSet.empty[String], Some(formula))
@@ -89,7 +112,7 @@ object SkolemizationGeneration {
   def skolemizeFormulaWithSingleVariable(formula: TPTP.FOF.Formula, skolemizedVariable: String, skolemFunctionName: String, dependentVariables: Seq[String]): TPTP.FOF.Formula = {
     
     val (boundVars, exists) = findBoundVariablesUpToExistential(formula, skolemizedVariable)
-
+    Logger.println(s"Found bound variables for skolemization: ${boundVars.mkString(", ")}")
     val skolemFunction = TPTP.FOF.AtomicTerm(
       skolemFunctionName,
       boundVars.toSeq.map(v => TPTP.FOF.Variable(v))
@@ -158,6 +181,7 @@ object SkolemizationGeneration {
         Logger.println(s"Checking skolemization details for node ${node.name}")
         val details = AnnotationInformationHelpers
           .getSkolemizationInformation(node.additionalInfo)
+        val parentNode = dag.nodes(node.parents.head)
         details.newSymbols.foreach { sym =>
           Logger.println(s"Checking skolem function $sym")
           if (
@@ -171,16 +195,18 @@ object SkolemizationGeneration {
           skolemFunctionsDefined += sym
           details.skolemDefinitions.find(_._2 == sym).foreach {
             case (variable, function, args) =>
+              Logger.println(s"$variable , $function , ${args.mkString(", ")}")
+              Logger.println(parentNode.formula.pretty)
               val (boundVariables, _) = findBoundVariablesUpToExistential(
-                node.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula,
+                parentNode.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula,
                 variable
               )
               Logger.println(
-                s"Skolem function $sym is defined for variable $variable with variables ${args.mkString(", ")} and formula has ${boundVariables.mkString(", ")} as bound variables"
+                s"Skolem function $sym is defined for variable $variable with variables ${args.mkString(", ")} and formula has ${boundVariables.mkString(", ")} as bound variables", Logger.VERBOSITY_MEDIUM
               )
               if (args.size != boundVariables.size) {
                 throw new ProofErrorException(
-                  s"Skolem function $sym is defined with inconsistent arities in the proof DAG"
+                  s"node ${node.name}: Skolem function $sym is defined with inconsistent arities in the proof DAG ${args.size} vs ${boundVariables.size}"
                 )
               }
               Logger.println(

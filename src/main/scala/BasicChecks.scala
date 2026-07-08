@@ -110,6 +110,7 @@ object BasicChecks {
     val connectedSinks =
       dag.sinks.filter(sink => dag.edges.exists(edge => edge.to == sink))
     Logger.println(s"Connected sinks: ${connectedSinks.mkString(", ")}")
+    
     connectedSinks.foreach(connectedSink => {
       val connectedSinkNode = dag.nodes.getOrElse(
         connectedSink,
@@ -117,7 +118,6 @@ object BasicChecks {
           s"Connected sink $connectedSink not found in DAG nodes"
         )
       )
-
       connectedSinkNode.formula match {
         case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(value), _) =>
           value match {
@@ -163,6 +163,11 @@ object BasicChecks {
           )
       }
     })
+    if(connectedSinks.isEmpty) {
+      throw new ProofErrorException(
+        s"No connected sinks (with false) in the proof DAG"
+      )
+    }
   }
 
   def checkConjectureIsNotUsedAsPremise(dag: ProofDag.Dag): Unit = {

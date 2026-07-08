@@ -16,12 +16,21 @@ assembly: compile
 native: assembly
 	@echo "Building native image with GraalVM..."
 	@if command -v native-image >/dev/null 2>&1; then \
-		native-image -jar target/scala-2.13/valeadate.jar -march=native --gc=G1 -O3  valeadate && \
+		native-image -jar target/scala-2.13/valeadate.jar --gc=G1 -O3  valeadate && \
 		echo "Native executable created at: ./valeadate"; \
 	else \
 		echo "Error: native-image not found. Install GraalVM native-image."; \
 		exit 1; \
 	fi
+
+# Build static native image (musl)
+native-static: assembly
+	@echo "Building statically linked native image (musl) with GraalVM..."
+	@command -v native-image >/dev/null 2>&1 || { echo "Error: native-image not found. Install GraalVM native-image."; exit 1; }
+	@command -v musl-gcc >/dev/null 2>&1 && \
+		native-image -jar target/scala-2.13/valeadate.jar --static -O3 --libc=musl -H:Name=valeadate-musl -H:-ReduceImplicitExceptionStackTraceInformation -H:NativeLinkerOption=-L/usr/local/musl/lib && \
+		echo "Static native executable created at: ./valeadate-musl" || \
+		{ echo "Error: musl-gcc not found or native-image failed. Install musl toolchain (e.g. musl-tools) or use GraalVM musl builder image."; exit 1; }
 
 # Run the application
 run:

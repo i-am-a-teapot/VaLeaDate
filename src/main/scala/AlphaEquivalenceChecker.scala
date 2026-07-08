@@ -6,25 +6,32 @@ object AlphaEquivalenceChecker {
 
   def checkAlphaEquivalence(
       formula1: TPTP.FOF.Formula,
-      formula2: TPTP.FOF.Formula
+      formula2: TPTP.FOF.Formula,
+      functionsNeglectingOrder : Set[String] = Set.empty
   ): Boolean = {
-    val renamedFormula1 = renameVariablesFOF(formula1)
-    val renamedFormula2 = renameVariablesFOF(formula2)
+    val renamedFormula1 = renameVariablesFOF(formula1, functionsNeglectingOrder)
+    val renamedFormula2 = renameVariablesFOF(formula2, functionsNeglectingOrder)
     Logger.println(s"Renamed formula 1: ${renamedFormula1.pretty}")
     Logger.println(s"Renamed formula 2: ${renamedFormula2.pretty}")
     renamedFormula1 == renamedFormula2
   }
 
-  def renameVariablesFOF(formula: TPTP.FOF.Formula): TPTP.FOF.Formula = {
+  def renameVariablesFOF(formula: TPTP.FOF.Formula, functionsNeglectingOrder: Set[String] = Set.empty): TPTP.FOF.Formula = {
     renamingMap = Map.empty
     counter = 0
-    renameVariablesFOFRec(formula)
+    renameVariablesFOFRec(formula, functionsNeglectingOrder)
   }
 
-  private def renameVariablesFOFTerm(term: TPTP.FOF.Term): TPTP.FOF.Term = {
+  private def renameVariablesFOFTerm(term: TPTP.FOF.Term, functionsNeglectingOrder: Set[String] = Set.empty): TPTP.FOF.Term = {
     term match {
       case TPTP.FOF.AtomicTerm(f, args) =>
-        TPTP.FOF.AtomicTerm(f, args.map(arg => renameVariablesFOFTerm(arg)))
+        var res = args.map(arg => renameVariablesFOFTerm(arg, functionsNeglectingOrder))
+        if(functionsNeglectingOrder.contains(f)) {
+          res = res.sortBy(_.pretty)
+          Logger.println(s"Sorting arguments of function $f for alpha equivalence check")
+          Logger.println(s"Sorted arguments: ${res.map(_.pretty).mkString(", ")}")
+        }
+        TPTP.FOF.AtomicTerm(f, res)
       case TPTP.FOF.Variable(v) =>
         renamingMap.get(v) match {
           case Some(newName) => TPTP.FOF.Variable(newName)
@@ -36,21 +43,22 @@ object AlphaEquivalenceChecker {
   }
 
   private def renameVariablesFOFRec(
-      formula: TPTP.FOF.Formula
+      formula: TPTP.FOF.Formula,
+      functionsNeglectingOrder: Set[String] = Set.empty
   ): TPTP.FOF.Formula = {
     formula match {
       case TPTP.FOF.AtomicFormula(pred, args) =>
         TPTP.FOF.AtomicFormula(
           pred,
-          args.map(arg => renameVariablesFOFTerm(arg))
+          args.map(arg => renameVariablesFOFTerm(arg, functionsNeglectingOrder))
         )
       case TPTP.FOF.UnaryFormula(connective, inner) =>
-        TPTP.FOF.UnaryFormula(connective, renameVariablesFOFRec(inner))
+        TPTP.FOF.UnaryFormula(connective, renameVariablesFOFRec(inner, functionsNeglectingOrder))
       case TPTP.FOF.BinaryFormula(connective, left, right) =>
         TPTP.FOF.BinaryFormula(
           connective,
-          renameVariablesFOFRec(left),
-          renameVariablesFOFRec(right)
+          renameVariablesFOFRec(left, functionsNeglectingOrder),
+          renameVariablesFOFRec(right, functionsNeglectingOrder)
         )
       case TPTP.FOF.QuantifiedFormula(quantifier, vars, inner) =>
         var newVars = Set.empty[String]
@@ -64,19 +72,19 @@ object AlphaEquivalenceChecker {
         val renamedForm = TPTP.FOF.QuantifiedFormula(
           quantifier,
           newVars.toSeq,
-          renameVariablesFOFRec(inner)
+          renameVariablesFOFRec(inner, functionsNeglectingOrder)
         )
         renamingMap = oldRenamingMap
         renamedForm
       case TPTP.FOF.Equality(left, right) =>
         TPTP.FOF.Equality(
-          renameVariablesFOFTerm(left),
-          renameVariablesFOFTerm(right)
+          renameVariablesFOFTerm(left, functionsNeglectingOrder),
+          renameVariablesFOFTerm(right, functionsNeglectingOrder)
         )
       case TPTP.FOF.Inequality(left, right) =>
         TPTP.FOF.Inequality(
-          renameVariablesFOFTerm(left),
-          renameVariablesFOFTerm(right)
+          renameVariablesFOFTerm(left, functionsNeglectingOrder),
+          renameVariablesFOFTerm(right, functionsNeglectingOrder)
         )
       case _ => formula
     }

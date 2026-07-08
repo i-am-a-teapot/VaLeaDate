@@ -16,6 +16,8 @@ import scala.concurrent.duration._
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.atomic.AtomicInteger
 
 object Main {
 
@@ -198,7 +200,31 @@ object Main {
             timeout.toMillis
           )
           runConfigurationChecks(settings, conf)
-          run(conf)
+          val stackSizeInBytes = 1024 * 1024 * 1024
+
+          val appRunnable = new Runnable {
+            override def run(): Unit = {
+              try {
+                runApp(conf)
+              } catch {
+                case e: Throwable =>
+                  e.printStackTrace()
+                  sys.exit(1)
+              }
+            }
+          }
+
+          // Spawn a new thread with the explicitly requested stack size
+          val mainThreadOverride = new Thread(
+            null,
+            appRunnable,
+            "scala-main-override",
+            stackSizeInBytes
+          )
+
+          mainThreadOverride.start()
+          mainThreadOverride
+            .join() // Block the musl main thread until your app finishes
         } finally {
           watcher.cancel()
         }
@@ -252,13 +278,12 @@ object Main {
     }
   }
 
-  private def loadAnnotatedFormulas(
+  private def getCorrectPath(
       path: String,
       baseDir: String,
       settings: Settings
-  ): Seq[TPTP.AnnotatedFormula] = {
+  ): Path = {
     var fullPath = Paths.get(path)
-
     if (!fullPath.isAbsolute) {
       val alternativePath = Paths.get(baseDir, path)
       if (
@@ -279,7 +304,16 @@ object Main {
         }
       }
     }
+    fullPath
+  }
 
+  private def loadAnnotatedFormulas(
+      path: String,
+      baseDir: String,
+      settings: Settings
+  ): Seq[TPTP.AnnotatedFormula] = {
+
+    val fullPath = getCorrectPath(path, baseDir, settings)
     val source = Source.fromFile(fullPath.toFile)
     var allFormulas = Seq.empty[TPTP.AnnotatedFormula]
     try {
@@ -329,10 +363,30 @@ object Main {
     }
   }
 
-  def run(config: Config): Unit = {
+  def runApp(config: Config): Unit = {
     Logger.setVerbose(config.verbosity)
+    val stackSizeInBytes = 4 * 1024 * 1024 // 4MB, adjust as needed
+    val threadFactory = new ThreadFactory {
+      private val threadNumber = new AtomicInteger(1)
+      private val group = Thread.currentThread().getThreadGroup
+
+      override def newThread(r: Runnable): Thread = {
+        // Thread constructor: (ThreadGroup, Runnable, Name, StackSize)
+        val t = new Thread(
+          group,
+          r,
+          s"custom-pool-thread-${threadNumber.getAndIncrement()}",
+          stackSizeInBytes
+        )
+        if (t.isDaemon) t.setDaemon(false)
+        if (t.getPriority != Thread.NORM_PRIORITY)
+          t.setPriority(Thread.NORM_PRIORITY)
+        t
+      }
+    }
+
     val executionContext = ExecutionContext.fromExecutorService(
-      Executors.newFixedThreadPool(config.parallel)
+      Executors.newFixedThreadPool(config.parallel, threadFactory)
     )
     try {
       Logger.println(s"Reading input from: ${config.inputFile}")
@@ -380,9 +434,11 @@ object Main {
           var formulas =
             loadAnnotatedFormulas(problemFile, proofFileBasePath, settings)
           problemFormulas = problemFormulas ++ formulas
+          var correctPath =
+            getCorrectPath(problemFile, proofFileBasePath, settings)
           var translationJob =
             TPTPProblemGenerator.buildVampireJobSpec(
-              problemFile,
+              correctPath.toString(),
               proofFileBasePath,
               settings.vampireBinary,
               settings.tptpDirectory
@@ -402,13 +458,17 @@ object Main {
         config.allowSyntacticMismatchOfAxioms
       )
 
-      Logger.println("Extracting skolemization details from proof DAG...")
-      val skolemFunctionArities =
-        SkolemizationGeneration.checkSkolemizationDetailsAreConsistent(dag)
+      
 
+      Logger.println("Waiting for Vampire translation jobs to complete...")
       val translationResult = Await.result(
         translationResultsFuture,
         scala.concurrent.duration.Duration.Inf
+      )
+
+      Logger.println(
+        translationResult.map(_.stdout).mkString("\n"),
+        verbosity = Logger.VERBOSITY_MEDIUM
       )
 
       var translatedVariables: String = ""
@@ -428,6 +488,10 @@ object Main {
       )
       dag = res._1
       val additionalProofObligations = res._2
+
+      Logger.println("Extracting skolemization details from proof DAG...")
+      val skolemFunctionArities =
+        SkolemizationGeneration.checkSkolemizationDetailsAreConsistent(dag)
 
       if (config.output.nonEmpty) {
         val renderedDagAfterAdditionalObligations = dag.toDot
@@ -451,16 +515,19 @@ object Main {
           TPTPProblemGenerator.buildTheoremCheckJobSpec(
             x,
             settings.vampireBinary,
-            settings.tptpDirectory
+            settings.tptpDirectory,
+            config.timeout
           )
         )(executionContext)
+
       val additionalObligationCheckResultsFuture = JobScheduler.runNodes(
         additionalProofObligations
       )(x =>
         TPTPProblemGenerator.buildTheoremCheckJobSpec(
           x,
           settings.vampireBinary,
-          settings.tptpDirectory
+          settings.tptpDirectory,
+          config.timeout
         )
       )(executionContext)
 

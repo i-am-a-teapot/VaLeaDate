@@ -182,6 +182,10 @@ object ProofRewriter {
     var formula = node.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula
     var parentFormula =
       parentNode.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula
+    
+    //check if order of quantifiers is correct, if not add nnf transformation step
+    var skolemizationOrder = skolemizationInfo.skolemDefinitions.head._3;
+
     if (!AnnotatedFormulaHelpers.checkFormulaIsInNNF(parentFormula)) {
       Logger.println(
         s"Parent formula $parentName for node $nodeName is not in NNF, adding NNF transformation step"
@@ -240,10 +244,12 @@ object ProofRewriter {
         skolemizedFunVars
       )
 
+    Logger.println(s"excluding $skolemizedFunName from alpha equivalence check")
     if (
       !AlphaEquivalenceChecker.checkAlphaEquivalence(
         skolemizedParentFormula,
-        formula
+        formula,
+        Set(skolemizedFunName)
       )
     ) {
       Logger.println(
