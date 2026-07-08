@@ -25,7 +25,7 @@ object Main {
       var vampireBinary: String = "",
       var leanLibraryPath: String = "",
       var leanBinary: String = "",
-      var tptpDirectory: String = ""
+      var tptpDirectory: Option[String] = None
   );
 
   case class Config(
@@ -81,9 +81,8 @@ object Main {
       "VAMPIRE_BINARY",
       Paths.get(binaryBasePath, "vampire/build/vampire").toString()
     )
-    settings.tptpDirectory = scala.util.Properties.envOrElse(
-      "TPTP",
-      Paths.get(System.getProperty("user.home"), "TPTP-v9.2.1").toString()
+    settings.tptpDirectory = scala.util.Properties.envOrNone(
+      "TPTP"
     )
 
     val parser = {
@@ -185,7 +184,7 @@ object Main {
         if (conf.leanLibraryPath.nonEmpty)
           settings.leanLibraryPath = conf.leanLibraryPath
         if (conf.tptpDirectory.nonEmpty)
-          settings.tptpDirectory = conf.tptpDirectory
+          settings.tptpDirectory = Some(conf.tptpDirectory)
         val timeout = conf.timeout.seconds
         val watcher = new Timer(true)
         try {
@@ -257,12 +256,16 @@ object Main {
         s"Lean library path is not a directory: ${settings.leanLibraryPath}"
       )
     }
-    val tptpDirectoryPath = Paths.get(settings.tptpDirectory)
-    if (!Files.isDirectory(tptpDirectoryPath)) {
-      throw new IllegalArgumentException(
-        s"TPTP directory is not a directory: ${settings.tptpDirectory}"
-      )
+
+    if(settings.tptpDirectory.isDefined){
+      val tptpDirectoryPath = Paths.get(settings.tptpDirectory.get)
+      if (!Files.isDirectory(tptpDirectoryPath)) {
+        throw new IllegalArgumentException(
+          s"TPTP directory is not a directory: ${settings.tptpDirectory}"
+        )
+      }
     }
+    
   }
 
   def killChildProcesses(): Unit = {
@@ -291,7 +294,12 @@ object Main {
       ) {
         fullPath = alternativePath
       } else {
-        val alternativePath2 = Paths.get(settings.tptpDirectory, path)
+        if(settings.tptpDirectory.isEmpty){
+          throw new IllegalArgumentException(
+            s"Input file not found: $path, tried baseDir: $baseDir and TPTP directory is not set"
+          )
+        }
+        val alternativePath2 = Paths.get(settings.tptpDirectory.get, path)
         if (
           Files
             .exists(alternativePath2) && Files.isRegularFile(alternativePath2)
@@ -299,7 +307,7 @@ object Main {
           fullPath = alternativePath2
         } else {
           throw new IllegalArgumentException(
-            s"Input file not found: $path, tried baseDir: $baseDir and TPTP directory: ${settings.tptpDirectory}"
+            s"Input file not found: $path, tried baseDir: $baseDir and TPTP directory: ${settings.tptpDirectory.get}"
           )
         }
       }

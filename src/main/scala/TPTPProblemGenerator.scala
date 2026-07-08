@@ -125,11 +125,15 @@ object TPTPProblemGenerator {
       inputProblemFile: String,
       proofFileBasePath: String,
       vampireBinary: String,
-      tptpPath: String
+      tptpPath: Option[String]
   ): JobScheduler.JobSpec = {
     var fullPath = Paths.get(inputProblemFile)
     if (!fullPath.isAbsolute) {
       fullPath = Paths.get(proofFileBasePath, inputProblemFile)
+    }
+    val environment = tptpPath match {
+      case Some(path) => Map("TPTP" -> path)
+      case None       => Map.empty[String, String]
     }
     JobScheduler.JobSpec(
       Seq(
@@ -140,14 +144,14 @@ object TPTPProblemGenerator {
         "--output_axiom_names",
         "on"
       ),
-      env = Map("TPTP" -> tptpPath)
+      env = environment
     )
   }
 
   final def buildTheoremCheckJobSpec(
       inference: Inference,
       vampireBinary: String,
-      tptpPath: String,
+      tptpPath: Option[String],
       timeout: Int = 0
   ): JobScheduler.JobSpec = {
     val command = Seq(
@@ -169,10 +173,14 @@ object TPTPProblemGenerator {
     )
     val problemText =
       TPTPProblemGenerator.generateProblemFromInference(inference)
+    val map = tptpPath match {
+      case Some(path) => Map("TPTP" -> path)
+      case None       => Map.empty[String, String]
+    }
     JobScheduler.JobSpec(
       command,
       stdin = problemText,
-      env = Map("TPTP" -> tptpPath)
+      env = map
     )
   }
 }
