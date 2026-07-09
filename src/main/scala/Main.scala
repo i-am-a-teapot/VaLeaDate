@@ -18,6 +18,8 @@ import scala.concurrent.ExecutionContext
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
+import AnnotatedFormulaHelpers.Func
+import AnnotatedFormulaHelpers.Pred
 
 object Main {
 
@@ -42,6 +44,7 @@ object Main {
       pathForLeanOutput: Option[String] = None,
       assumeThm: Boolean = false,
       parallel: Int = 8,
+      acceptNewSymbols: Boolean = false,
       treatNegatedConjectureAsAxiom: Boolean = false,
       allowSyntacticMismatchOfAxioms: Boolean = false,
       compileWithMultipleLeanFiles: Boolean = false,
@@ -147,6 +150,9 @@ object Main {
             if (x >= 0) success
             else failure("Value <parallel> must be a positive integer")
           ),
+        opt[Unit]("accept-new-symbols")
+          .action((_, c) => c.copy(acceptNewSymbols = true))
+          .text("accept new symbols in the input problem that are not in the proof"),
         opt[Unit]("multiple-lean-files")
           .action((_, c) => c.copy(compileWithMultipleLeanFiles = true))
           .text("compile Lean output with multiple files instead of one file"),
@@ -444,17 +450,19 @@ object Main {
         }
       }
 
-      val symbolsInProblemFormulas = problemFormulas.flatMap(f => AnnotatedFormulaHelpers.getSymbolsWithArity(f)).distinct
-      Logger.println(
-        s"Symbols in problem formulas: ${symbolsInProblemFormulas.map(s => s"${s.toString()}").mkString(", ")}"
-      )
+      var symbolsInProblemFormulas = problemFormulas.flatMap(f => AnnotatedFormulaHelpers.getSymbolsWithArity(f)).distinct
+      symbolsInProblemFormulas = symbolsInProblemFormulas.filter {
+        case Func(symbol, arity) => !TPTP.isDollarWord(symbol) && !TPTP.isDollarOrDollarDollarWord(symbol)
+        case Pred(symbol, arity) => !TPTP.isDollarWord(symbol) && !TPTP.isDollarOrDollarDollarWord(symbol)
+      }
 
       Logger.println("Performing basic checks on proof DAG...")
       BasicChecks.performAllBasicChecks(
         dag,
         problemFormulas,
         config.allowSyntacticMismatchOfAxioms,
-        config.assumeThm
+        config.assumeThm,
+        config.treatNegatedConjectureAsAxiom
       )
 
       Logger.println("Waiting for Vampire translation jobs to complete...")
@@ -486,6 +494,17 @@ object Main {
         Logger.println(
           s"Proof DAG after adding additional proof obligations written to: ${config.output}"
         )
+      }
+      
+      if(config.acceptNewSymbols){
+        val symbolsInProofFormulas = dag.symbolsWithArity
+        val introducedFunctions = skolemFunctionArities.map(_._1).toSet
+        Logger.println(symbolsInProofFormulas.map(_.toString).mkString(", "))
+        symbolsInProblemFormulas = symbolsInProofFormulas.filter {
+          case Func(symbol, arity) =>
+            !introducedFunctions.contains(symbol) && !TPTP.isDollarWord(symbol) && !TPTP.isDollarOrDollarDollarWord(symbol)
+          case Pred(symbol, arity) => !TPTP.isDollarWord(symbol) && !TPTP.isDollarOrDollarDollarWord(symbol)
+        }
       }
 
       val theoremInferences = collectTheoremInferences(dag, config.assumeThm)

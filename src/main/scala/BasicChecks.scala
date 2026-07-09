@@ -132,7 +132,7 @@ object BasicChecks {
     if (!dag.falseSinks.isEmpty) {
       val connectedFalseSinks =
         dag.falseSinks.filter(sink => dag.edges.exists(edge => edge.to == sink))
-      if (connectedFalseSinks.size == 0) {
+      if (connectedFalseSinks.size == 0 && dag.nodes.size > 1) {
         throw new ProofErrorException(
           s"No connected sinks are false, but there are false sinks in the DAG: ${dag.falseSinks.mkString(", ")}"
         )
@@ -177,7 +177,8 @@ object BasicChecks {
 
   def checkInputProblemIsSameAsProof(
       dag: ProofDag.Dag,
-      problemFormulas: Seq[TPTP.AnnotatedFormula]
+      problemFormulas: Seq[TPTP.AnnotatedFormula],
+      treatNegatedConjectureAsAxiom: Boolean = false
   ): Unit = {
     val nodesToCheck = dag.axioms ++ dag.conjectures
     for (equivsToCheck <- nodesToCheck) {
@@ -226,9 +227,15 @@ object BasicChecks {
       }
 
       if (problemFormula.role != nodeFromProof.role) {
-        throw new ProofErrorException(
-          s"Role mismatch for axiom $equivsToCheck: problem formula role is ${problemFormula.role}, but DAG node role is ${nodeFromProof.role}"
-        )
+        if(treatNegatedConjectureAsAxiom && problemFormula.role == NEGATED_CONJECTURE && nodeFromProof.role == AXIOM) {
+          Logger.println(
+            s"Treating negated conjecture ${nodeFromProof.name} as axiom"
+          )
+        } else {
+          throw new ProofErrorException(
+            s"Role mismatch for axiom $equivsToCheck: problem formula role is ${problemFormula.role}, but DAG node role is ${nodeFromProof.role}"
+          )
+        }
       }
 
       Logger.println(
@@ -409,7 +416,8 @@ object BasicChecks {
       dag: ProofDag.Dag,
       problemFormulas: Seq[TPTP.AnnotatedFormula],
       allowAxiomMismatch: Boolean,
-      assumeTheorems: Boolean
+      assumeTheorems: Boolean,
+      treatNegatedConjectureAsAxiom: Boolean
   ): Unit = {
     Logger.println("Checking all edges refer to existing nodes...")
     checkAllEdgesReferToExistingNodes(dag)
@@ -439,7 +447,7 @@ object BasicChecks {
     checkFalseRootReachesAxioms(dag)
     Logger.println("Checking alpha-equivalence of problem formulas...")
     if (!allowAxiomMismatch) {
-      checkInputProblemIsSameAsProof(dag, problemFormulas)
+      checkInputProblemIsSameAsProof(dag, problemFormulas, treatNegatedConjectureAsAxiom)
     }
   }
 
