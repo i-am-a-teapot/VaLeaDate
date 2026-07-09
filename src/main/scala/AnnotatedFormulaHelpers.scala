@@ -209,9 +209,9 @@ object AnnotatedFormulaHelpers {
   def getSymbolsWithArity(
       atomicFormula: TPTP.CNF.AtomicFormula
   ): Seq[SymbolId] = {
-    val funSym = atomicFormula.f
+    val predSym = atomicFormula.f
     val args = atomicFormula.args
-    Seq(Func(funSym, args.size)) ++ args.flatMap(getSymbolsWithArity)
+    Seq(Pred(predSym, args.size)) ++ args.flatMap(getSymbolsWithArity)
   }
 
   def getSymbolsWithArity(
