@@ -668,8 +668,11 @@ object Main {
         }
       } else {
         val outputFile: Path = if (config.pathForLeanOutput.isDefined) {
-
-          Paths.get(config.pathForLeanOutput.get)
+          if (Files.isDirectory(Paths.get(config.pathForLeanOutput.get))) {
+            Paths.get(config.pathForLeanOutput.get).resolve("output.lean")
+          } else {
+            Paths.get(config.pathForLeanOutput.get)
+          }
         } else {
           Files.createTempFile("lean_output_", ".lean")
         }
