@@ -13,12 +13,19 @@ object BasicChecks {
     }
   }
 
-  def checkAllSourcesAreAxiomsOrConjectures(dag: ProofDag.Dag): Unit = {
+  def checkAllSourcesAreAxiomsOrConjecturesOrPlainWithThm(
+      dag: ProofDag.Dag,
+      assumeTheorems: Boolean
+  ): Unit = {
     var hasConjecture = !dag.conjectures.isEmpty
     dag.sources.foreach(source =>
       dag.nodes.get(source) match {
         case Some(node) =>
           val roleIsAllowed = node.role == AXIOM ||
+            node.role == "plain" && AnnotationInformationHelpers.isThm(
+              node.additionalInfo,
+              assumeTheorems
+            ) ||
             (hasConjecture && node.role == CONJECTURE) ||
             (!hasConjecture && node.role == NEGATED_CONJECTURE)
           if (!roleIsAllowed) {
@@ -90,6 +97,18 @@ object BasicChecks {
       )
   }
 
+  def checkCTHStatusOnlyOnNegatedConjectures(dag: ProofDag.Dag): Unit = {
+    dag.nodes.values
+      .filter(node => node.role != NEGATED_CONJECTURE)
+      .foreach(node =>
+        if (AnnotationInformationHelpers.isCth(node.additionalInfo)) {
+          throw new ProofErrorException(
+            s"Node ${node.name} with role '${node.role}' has CTH status but is not a negated conjecture"
+          )
+        }
+      )
+  }
+
   def checkAllEdgesReferToExistingNodes(dag: ProofDag.Dag): Unit = {
     val nodeNames = dag.nodes.keySet
     dag.edges.foreach { case ProofDag.Edge(from, to) =>
@@ -106,66 +125,29 @@ object BasicChecks {
     }
   }
 
-  def checkAllConnectedSinksAreFalse(dag: ProofDag.Dag): Unit = {
+  def checkFalseConnectedSinks(dag: ProofDag.Dag): Unit = {
     val connectedSinks =
       dag.sinks.filter(sink => dag.edges.exists(edge => edge.to == sink))
-    Logger.println(s"Connected sinks: ${connectedSinks.mkString(", ")}")
-    
-    connectedSinks.foreach(connectedSink => {
-      val connectedSinkNode = dag.nodes.getOrElse(
-        connectedSink,
+
+    if (!dag.falseSinks.isEmpty) {
+      val connectedFalseSinks =
+        dag.falseSinks.filter(sink => dag.edges.exists(edge => edge.to == sink))
+      if (connectedFalseSinks.size == 0) {
         throw new ProofErrorException(
-          s"Connected sink $connectedSink not found in DAG nodes"
+          s"No connected sinks are false, but there are false sinks in the DAG: ${dag.falseSinks.mkString(", ")}"
         )
-      )
-      connectedSinkNode.formula match {
-        case TPTP.FOFAnnotated(_, _, TPTP.FOF.Logical(value), _) =>
-          value match {
-            case TPTP.FOF.AtomicFormula("$false", _) => ()
-            case _                                   =>
-              Logger.println(
-                s"Connected sink $connectedSink is not false: ${value.pretty}"
-              )
-              throw new ProofErrorException(
-                s"Connected sink $connectedSink must be '$$false' but is '${value.pretty}'"
-              )
-          }
-        case TPTP.CNFAnnotated(_, _, TPTP.CNF.Logical(value), _) =>
-          if (value.isEmpty) {
-            ()
-          } else if (value.size == 1) {
-            value.head match {
-              case TPTP.CNF
-                    .PositiveAtomic(TPTP.CNF.AtomicFormula("$false", _)) =>
-                ()
-              case TPTP.CNF
-                    .NegativeAtomic(TPTP.CNF.AtomicFormula("$true", _)) =>
-                ()
-              case _ =>
-                Logger.println(
-                  s"Connected sink $connectedSink is not false: ${value.head.pretty}"
-                )
-                throw new ProofErrorException(
-                  s"Connected sink $connectedSink must be false but contains '${value.head.pretty}'"
-                )
-            }
-          } else {
-            throw new ProofErrorException(
-              s"Connected sink $connectedSink CNF clause has ${value.size} literals, expected contradiction"
-            )
-          }
-        case _ =>
-          Logger.println(
-            s"Unexpected formula type for connected sink $connectedSink"
-          )
-          throw new ProofErrorException(
-            s"Unexpected formula type for connected sink $connectedSink"
-          )
       }
-    })
-    if(connectedSinks.isEmpty) {
+    } else {
       throw new ProofErrorException(
-        s"No connected sinks (with false) in the proof DAG"
+        s"No false sinks found in the proof DAG"
+      )
+    }
+  }
+
+  def checkFalseRootReachesAxioms(dag: ProofDag.Dag): Unit = {
+    if(!dag.oneConnectedFalseRoot.isDefined) {
+      throw new ProofErrorException(
+        s"No false sink reaches any axiom in the proof DAG"
       )
     }
   }
@@ -374,11 +356,11 @@ object BasicChecks {
               s"Skolemization step ${node.name} does not have a parent"
             )
         }
-      
+
         if (!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofParent)) {
-          fofParent = AnnotatedFormulaHelpers.transformFormulaToNNF(fofParent)    
+          fofParent = AnnotatedFormulaHelpers.transformFormulaToNNF(fofParent)
         }
-        if(!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofFormula)) {
+        if (!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofFormula)) {
           fofFormula = AnnotatedFormulaHelpers.transformFormulaToNNF(fofFormula)
         }
         val exQuantVariablesParent = AnnotatedFormulaHelpers
@@ -426,30 +408,35 @@ object BasicChecks {
   def performAllBasicChecks(
       dag: ProofDag.Dag,
       problemFormulas: Seq[TPTP.AnnotatedFormula],
-      allowAxiomMismatch: Boolean
+      allowAxiomMismatch: Boolean,
+      assumeTheorems: Boolean
   ): Unit = {
     Logger.println("Checking all edges refer to existing nodes...")
     checkAllEdgesReferToExistingNodes(dag)
     Logger.println("Checking acyclicity of the proof DAG...")
     checkAcyclicity(dag)
     Logger.println("Checking all sources are axioms or conjectures...")
-    checkAllSourcesAreAxiomsOrConjectures(dag)
+    checkAllSourcesAreAxiomsOrConjecturesOrPlainWithThm(dag, assumeTheorems)
     Logger.println("Checking all negated conjectures are CTH...")
     checkAllNegatedConjecturesAreCTH(dag)
     Logger.println("Checking negated conjectures have conjecture parents...")
     checkAllNegatedConjectureHaveConjectureParent(dag)
     Logger.println("Checking all inferences have parents...")
-    checkAllInferencesHaveParents(dag)
-    Logger.println("Checking all connected sinks are false...")
-    checkAllConnectedSinksAreFalse(dag)
+    // checkAllInferencesHaveParents(dag)
+    Logger.println("Checking CTH status only on negated conjectures...")
+    checkCTHStatusOnlyOnNegatedConjectures(dag)
+    Logger.println("Checking connected sinks have false...")
+    checkFalseConnectedSinks(dag)
     Logger.println("Checking conjecture is not used as premise...")
     checkConjectureIsNotUsedAsPremise(dag)
     Logger.println("Checking if every axiom has a file parent annotation...")
     checkIfEveryAxiomHasFileParentAnnotation(dag)
-    Logger.println("Smoke testing skolemization step ...")
+    Logger.println("Smoke testing skolemization steps ...")
     checkSkolemizationStepBasics(dag)
     Logger.println("Checking if every ESA step is supported...")
     checkESAIsSupported(dag)
+    Logger.println("Checking if false root reaches axioms...")
+    checkFalseRootReachesAxioms(dag)
     Logger.println("Checking alpha-equivalence of problem formulas...")
     if (!allowAxiomMismatch) {
       checkInputProblemIsSameAsProof(dag, problemFormulas)

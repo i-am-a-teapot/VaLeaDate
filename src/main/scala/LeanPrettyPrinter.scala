@@ -125,7 +125,7 @@ object LeanPrettyPrinter {
     if (variablesAsTemplates) "_" else name
   }
 
-  private def leanIdent(name: String): String = {
+  def leanIdent(name: String): String = {
     var res = name
     if (TPTP.isDollarOrDollarDollarWord(name)) {
       res = name match {

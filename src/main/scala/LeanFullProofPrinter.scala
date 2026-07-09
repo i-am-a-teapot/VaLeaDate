@@ -2,6 +2,9 @@ import SkolemizationGeneration.generateSkolemization
 import java.io.{FileWriter, PrintWriter}
 import leo.datastructures.TPTP
 import java.nio.file.Path
+import AnnotatedFormulaHelpers.SymbolId
+import AnnotatedFormulaHelpers.Func
+import AnnotatedFormulaHelpers.Pred
 
 object LeanFullProofPrinter {
   def writeLeanPreamble(writer: PrintWriter): Unit = {
@@ -12,12 +15,44 @@ set_option maxHeartbeats 0
 set_option maxRecDepth 100000000""")
   }
 
+  private def writeLeanDefinedVariables(writer: PrintWriter, variables: Seq[SymbolId]): Unit = {
+    writer.println("class Data where")
+    writer.println("  {ι : Type u}")
+    writer.println("  [inst : Inhabited ι]")
+    //print functions and predicates grouped by arity
+    val functions = variables.collect { case f: Func => f }.distinct
+    val predicates = variables.collect { case p: Pred => p }.distinct
+    Logger.println(s"Functions: ${functions.map(f => s"${f.name}/${f.arity}").mkString(", ")}")
+    Logger.println(s"Predicates: ${predicates.map(p => s"${p.name}/${p.arity}").mkString(", ")}")
+    val functionsByArity = functions.groupBy(_.arity).toSeq.sortBy(_._1)
+    val predicatesByArity = predicates.groupBy(_.arity).toSeq.sortBy(_._1)
+    for ((arity, funcs) <- functionsByArity) {
+      writer.print("  {")
+      writer.print(funcs.map(f => LeanPrettyPrinter.leanIdent(f.name)).mkString(" "))
+      writer.println(s" : ${List.fill(arity)("ι →").mkString} ι}")
+    }
+    for ((arity, preds) <- predicatesByArity) {
+      writer.print("  {")
+      writer.print(preds.map(p => LeanPrettyPrinter.leanIdent(p.name)).mkString(" "))
+      writer.println(s" : ${List.fill(arity)("ι →").mkString} Prop}")
+    }
+    writer.print("export Data ( ι inst ")
+    writer.print(variables.map {
+      case f: Func => LeanPrettyPrinter.leanIdent(f.name)
+      case p: Pred => LeanPrettyPrinter.leanIdent(p.name)
+    }.mkString(" "))
+    writer.println(" )")
+    
+  }
+  
   private def writeLeanProofSteps(
       writer: PrintWriter,
       proof: ProofDag.Dag,
       usedParents: Map[String, Seq[String]]
-  ): Unit = {
-    proof.topologicalSort.foreach { nodeName =>
+  ): String // Returns the name of the last step in the proof
+   = {
+    var topologicalSort = proof.topologicalSortWithSymbols()
+    topologicalSort.foreach { nodeName =>
       val node = proof.nodes(nodeName)
       val containsConjectures = !proof.conjectures.isEmpty
       if (
@@ -87,12 +122,21 @@ set_option maxRecDepth 100000000""")
             node.formula.formula.asInstanceOf[TPTP.FOF.Logical].formula
           )
         } else {
+          
           writer.print(
             "  have step_" + nodeName + " := " + nodeName + "." + nodeName + "_fullProof "
           )
+          val parentsOfNode = usedParents.getOrElse(nodeName, Seq.empty)
+          val usedSymbols = proof.nodes(nodeName).symbolsWithArity.map(_.name).toSet
+          //drop all used symbols that are not in proof.introducedSymbols
+          val symbolsUsedIntro = proof.introducedSymbols
+            .filter { symbol => usedSymbols.contains(symbol) }
+          if (symbolsUsedIntro.nonEmpty) {
+
+            writer.print(symbolsUsedIntro.map(s => LeanPrettyPrinter.leanIdent(s)).map(s => s"($s:=$s)").mkString(" ") + " ");
+          }
           writer.print(
-            usedParents
-              .getOrElse(nodeName, Seq.empty)
+            parentsOfNode
               .map(parent => "step_" + parent)
               .mkString(" ")
           )
@@ -103,6 +147,9 @@ set_option maxRecDepth 100000000""")
           "  apply Classical.byContradiction; intro step_" + nodeName
         )
       }
+    }
+    topologicalSort.lastOption.getOrElse {
+      throw new ProofUnsureException("DAG is empty, no nodes found")
     }
   }
 
@@ -160,15 +207,13 @@ set_option maxRecDepth 100000000""")
       writer.print("step_" + sourceName + " ")
     }
     writer.println("")
-    writeLeanProofSteps(writer, dag, usedParents)
-    writer.println("  exact step_" + dag.topologicalSort.lastOption.getOrElse {
-      throw new ProofUnsureException("DAG is empty, no nodes found")
-    })
+    val lastNode = writeLeanProofSteps(writer, dag, usedParents)
+    writer.println("  exact step_" + lastNode)
   }
 
   def writeLeanOutputFile(
       outputFile: Path,
-      translatedVariables: String,
+      translatedVariables:  Seq[SymbolId],
       theoremCheckResults: Map[String, JobScheduler.ProcessResult],
       additionalObligationCheckResults: Map[String, JobScheduler.ProcessResult],
       dag: ProofDag.Dag,
@@ -178,7 +223,7 @@ set_option maxRecDepth 100000000""")
     val writer = new PrintWriter(outputFile.toFile())
     try {
       LeanFullProofPrinter.writeLeanPreamble(writer)
-      writer.println(translatedVariables)
+      LeanFullProofPrinter.writeLeanDefinedVariables(writer, translatedVariables)
       writer.println("variable [Data]")
       writer.println("variable [Inhabited Data.ι]")
       val variablesByArity =
@@ -189,7 +234,7 @@ set_option maxRecDepth 100000000""")
       variablesByArity.foreach { case (arity, variables) =>
         writer.print("  {")
         writer.print(
-          variables.map(node => s"_${node.toString()}").mkString(" ")
+          variables.map(node => LeanPrettyPrinter.leanIdent(node.toString)).mkString(" ")
         )
         writer.println(s" : ${List.fill(arity)("ι→").mkString}ι}")
       }
@@ -213,7 +258,7 @@ set_option maxRecDepth 100000000""")
 
   def writeLeanOutputFiles(
       outputDir: Path,
-      translatedVariables: String,
+      translatedVariables: Seq[SymbolId],
       theoremCheckResults: Map[String, JobScheduler.ProcessResult],
       additionalObligationCheckResults: Map[String, JobScheduler.ProcessResult],
       dag: ProofDag.Dag,
@@ -225,7 +270,7 @@ set_option maxRecDepth 100000000""")
     val dataPath = outputDir.resolve("data.lean")
     var writer = new PrintWriter(new FileWriter(dataPath.toFile()))
     LeanFullProofPrinter.writeLeanPreamble(writer)
-    writer.println(translatedVariables)
+    LeanFullProofPrinter.writeLeanDefinedVariables(writer, translatedVariables)
     writer.println("variable [Data]")
     writer.println("variable [Inhabited Data.ι]")
     writer.close();

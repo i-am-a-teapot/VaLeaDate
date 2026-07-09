@@ -168,6 +168,8 @@ object TPTPProblemGenerator {
       inference.name + "_",
       "-wvo",
       "introduced_only",
+      "-ppr",
+      "off",
       "-t",
       timeout.toString
     )

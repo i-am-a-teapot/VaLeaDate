@@ -1,5 +1,6 @@
 import leo.datastructures.TPTP
 import leo.datastructures.TPTP.MetaFunctionData
+import AnnotatedFormulaHelpers.SymbolId
 
 object ProofDag {
 
@@ -15,11 +16,20 @@ object ProofDag {
   ) {
     def parents: Seq[String] =
       AnnotationInformationHelpers.namedParents(additionalInfo).distinct.sorted
+
+    lazy val symbolsWithArity: Seq[SymbolId] = {
+      AnnotatedFormulaHelpers.getSymbolsWithArity(formula)
+    }
   }
 
   final case class Edge(from: String, to: String)
 
   final case class Dag(nodes: Map[String, Node]) {
+
+    lazy val symbolsWithArity: Seq[SymbolId] = {
+      nodes.values.toSeq.flatMap(_.symbolsWithArity).distinct
+    }
+
     lazy val edges: Seq[Edge] =
       nodes.values.toSeq.sortBy(_.name).flatMap { node =>
         node.parents.map(parent => Edge(parent, node.name))
@@ -41,17 +51,104 @@ object ProofDag {
       nodes.keys.toSeq.filter(k => outdeg(k) == 0).sorted
     }
 
+    lazy val falseSinks: Seq[String] = {
+      sinks.filter(sink => {
+        val sinkNode = nodes.getOrElse(
+          sink,
+          throw new ProofErrorException(
+            s"Sink node $sink not found in DAG nodes"
+          )
+        )
+        AnnotatedFormulaHelpers.isFalseFormula(sinkNode.formula)
+      })
+    }
+
     lazy val topologicalSort: List[String] = {
+      topoSortWithExtraEdges(Seq.empty)
+    }
+
+    lazy val introducedSymbols: Set[String] = {
+      nodes.values.toSeq
+        .filter(node => AnnotationInformationHelpers.isEsa(node.additionalInfo))
+        .flatMap(node =>
+          AnnotationInformationHelpers
+            .getSkolemizationInformation(node.additionalInfo)
+            .newSymbols
+        )
+        .toSet
+    }
+
+    lazy val oneConnectedFalseRoot: Option[String] = {
+      def dfsInv(node: String, visited: Set[String]): Set[String] = {
+        if (visited.contains(node)) {
+          visited
+        } else {
+          val newVisited = visited + node
+          val children = edges.filter(edge => edge.to == node).map(_.from)
+          children.foldLeft(newVisited)((acc, child) => dfsInv(child, acc))
+        }
+      }
+      falseSinks.find(falseSink => {
+        // Perform a depth-first search (DFS) to find all reachable nodes from the false root
+        val reachableNodes = dfsInv(falseSink, Set.empty)
+        val axs = axioms.toSet
+        val reachableAxioms = reachableNodes.intersect(axs)
+        reachableAxioms.nonEmpty
+      }).headOption
+    }
+
+    def topologicalSortWithSymbols(): List[String] = {
+      // build symbol dependency edges for introduced symbols
+      var additionalEdges: Seq[Edge] = Seq.empty
+      val introducingNodes = nodes.values.filter(node =>
+        AnnotationInformationHelpers.isEsa(node.additionalInfo)
+      )
+      introducingNodes.foreach { node =>
+        // This believes that every esa node is a skolemization node
+        val skolemInfo =
+          AnnotationInformationHelpers.getSkolemizationInformation(
+            node.additionalInfo
+          );
+        val newSymbols = skolemInfo.newSymbols
+        newSymbols.foreach { sym =>
+          // create an edge to each node that uses this symbol
+          nodes.values.foreach { otherNode =>
+            if (otherNode.name != node.name) {
+              val otherSymbols = otherNode.symbolsWithArity.map(_.name).toSet
+              if (otherSymbols.contains(sym)) {
+                additionalEdges =
+                  additionalEdges :+ Edge(node.name, otherNode.name)
+              }
+            }
+          }
+        }
+      }
+      // also add edges from all sinks to a sink with false, if it exists to make sure that the false sink is the last node in the topological sort
+      if(oneConnectedFalseRoot.isEmpty) {
+        throw new ProofErrorException(
+          s"No false sink reaches any axiom in the proof DAG"
+        )
+      }
+      val falseSinkOpt = oneConnectedFalseRoot.get
+      sinks.filter(_ != falseSinkOpt).foreach { sink =>
+        additionalEdges = additionalEdges :+ Edge(sink, falseSinkOpt)
+      }
+      topoSortWithExtraEdges(additionalEdges)
+    }
+
+    private def topoSortWithExtraEdges(extraEdges: Seq[Edge]): List[String] = {
       import scala.collection.mutable
       val adj = mutable.Map.empty[String, mutable.ArrayBuffer[String]]
       nodes.keys.foreach(k => adj(k) = mutable.ArrayBuffer.empty[String])
-      edges.foreach { e =>
+      (edges ++ extraEdges).foreach { e =>
         adj.getOrElseUpdate(e.from, mutable.ArrayBuffer.empty) += e.to
       }
 
       val indeg = mutable.Map.empty[String, Int]
       nodes.keys.foreach(k => indeg(k) = 0)
-      edges.foreach(e => indeg(e.to) = indeg.getOrElse(e.to, 0) + 1)
+      (edges ++ extraEdges).foreach(e =>
+        indeg(e.to) = indeg.getOrElse(e.to, 0) + 1
+      )
 
       val queue = mutable.Queue.empty[String]
       indeg.foreach { case (k, v) => if (v == 0) queue.enqueue(k) }

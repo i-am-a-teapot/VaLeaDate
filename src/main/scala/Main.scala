@@ -436,55 +436,29 @@ object Main {
       Logger.println("Parsing input problem file...")
 
       var problemFormulas: Seq[TPTP.AnnotatedFormula] = Seq.empty;
-      var translationJobs = Seq.empty[JobScheduler.JobSpec]
       if (problemFiles.nonEmpty) {
         for (problemFile <- problemFiles) {
           var formulas =
             loadAnnotatedFormulas(problemFile, proofFileBasePath, settings)
           problemFormulas = problemFormulas ++ formulas
-          var correctPath =
-            getCorrectPath(problemFile, proofFileBasePath, settings)
-          var translationJob =
-            TPTPProblemGenerator.buildVampireJobSpec(
-              correctPath.toString(),
-              proofFileBasePath,
-              settings.vampireBinary,
-              settings.tptpDirectory
-            )
-          translationJobs = translationJobs :+ translationJob
         }
       }
 
-      val translationResultsFuture = JobScheduler.runFutures(translationJobs)(
-        executionContext
+      val symbolsInProblemFormulas = problemFormulas.flatMap(f => AnnotatedFormulaHelpers.getSymbolsWithArity(f)).distinct
+      Logger.println(
+        s"Symbols in problem formulas: ${symbolsInProblemFormulas.map(s => s"${s.toString()}").mkString(", ")}"
       )
 
       Logger.println("Performing basic checks on proof DAG...")
       BasicChecks.performAllBasicChecks(
         dag,
         problemFormulas,
-        config.allowSyntacticMismatchOfAxioms
+        config.allowSyntacticMismatchOfAxioms,
+        config.assumeThm
       )
-
-      
 
       Logger.println("Waiting for Vampire translation jobs to complete...")
-      val translationResult = Await.result(
-        translationResultsFuture,
-        scala.concurrent.duration.Duration.Inf
-      )
 
-      Logger.println(
-        translationResult.map(_.stdout).mkString("\n"),
-        verbosity = Logger.VERBOSITY_MEDIUM
-      )
-
-      var translatedVariables: String = ""
-      for (result <- translationResult) {
-        val parsedTranslation =
-          TranslationResult.parseTranslationResult(result)
-        translatedVariables += parsedTranslation.variableDeclarations + "\n"
-      }
 
       Logger.println(
         "Checking for syntactic mismatches between proof DAG and input problem..."
@@ -647,7 +621,7 @@ object Main {
         }
         val files = LeanFullProofPrinter.writeLeanOutputFiles(
           outputDir,
-          translatedVariables,
+          symbolsInProblemFormulas,
           theoremCheckResults,
           additionalObligationCheckResults,
           dag,
@@ -683,7 +657,7 @@ object Main {
 
         LeanFullProofPrinter.writeLeanOutputFile(
           outputFile,
-          translatedVariables,
+          symbolsInProblemFormulas,
           theoremCheckResults,
           additionalObligationCheckResults,
           dag,
