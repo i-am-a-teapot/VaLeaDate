@@ -1,0 +1,39 @@
+#!/bin/bash
+
+export VAMPLEAN_PATH=$(pwd)/../vamplean/.lake/build/lib/lean/
+export VAMPIRE_BINARY=$(pwd)/./vampire
+export LEAN_BINARY=$(pwd)/../requirements/elan/toolchains/leanprover--lean4---v4.31.0/bin/lean
+#echo $PATH
+#./vampire --mode translate $1
+#lean --version
+#lean ../vamplean/VampLean.lean
+#!/bin/zsh
+
+
+echo "Running good proofs:"
+./valeadate-musl ../Problems/Tests/baseline_a_proof.p
+./valeadate-musl ../Problems/Tests/baseline_b_proof.p
+./valeadate-musl ../Problems/Tests/test_suite_mutation.p
+./valeadate-musl ../Problems/Tests/skol_proof.p
+#
+echo "Running bad proofs:"
+./valeadate-musl ../Problems/Tests/test_suite_alpha_equiv.p
+./valeadate-musl ../Problems/Tests/test_suite_circ.p
+./valeadate-musl ../Problems/Tests/test_suite_cth_axiom.p
+./valeadate-musl ../Problems/Tests/test_suite_missing_file_info.p
+./valeadate-musl ../Problems/Tests/test_suite_missing_parent.p
+./valeadate-musl ../Problems/Tests/test_suite_missing_ref.p
+./valeadate-musl ../Problems/Tests/test_suite_no_thm.p
+./valeadate-musl ../Problems/Tests/test_suite_overskol.p
+./valeadate-musl ../Problems/Tests/test_suite_problem_status_skol.p
+./valeadate-musl ../Problems/Tests/test_suite_problem_status_skol2.p
+./valeadate-musl ../Problems/Tests/test_suite_problem_status_skol3.p
+./valeadate-musl ../Problems/Tests/test_suite_problem_status_skol4.p
+./valeadate-musl ../Problems/Tests/test_suite_underskol.p
+./valeadate-musl ../Problems/Tests/test_suite_using_conjecture.p
+./valeadate-musl ../Problems/Tests/test_suite_wrong_negation.p
+./valeadate-musl ../Problems/Tests/test_suite_wrong_parent.p
+./valeadate-musl ../Problems/Tests/test_suite_wrong_status_skol.p
+
+
+

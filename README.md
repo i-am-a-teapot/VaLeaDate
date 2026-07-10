@@ -55,10 +55,13 @@ export TPTP="$HOME/TPTP-v9.2.1"
 ```
 
 ```
+VaLeaDate 0.1.0
 Usage: VaLeaDate [options] <input_proof>
 
   <input_proof>            input TPTP file
   -o, --output <value>     output file for Graphviz DOT (optional)
+  -i, --input-problem <value>
+                           input TPTP problem file
   --v                      enable verbose output
   --vv                     enable very verbose output
   -l, --lean-binary <value>
@@ -76,5 +79,19 @@ Usage: VaLeaDate [options] <input_proof>
   --tptp-directory <value>
                            path to the TPTP directory
   -t, --timeout <value>    timeout in seconds (default: 30)
+  -j, --parallel <value>   number of parallel processes for theorem checking (default: 8)
+  --accept-new-symbols     accept new symbols in the input problem that are not in the proof
+  --multiple-lean-files    compile Lean output with multiple files instead of one file
+  --batch-size <value>     batch size (in kiB) for Lean files when compiling with multiple files
+  --auto-switch-to-multi-threshold <value>
+                           if the combined size (in kiB) of theorem outputs exceeds this threshold, automatically switch to compiling with multiple Lean files (default: batch-size*parallel)
   --help                   print this help message
 ```
+
+## Building a starexec image
+
+To build a starexec image (on modern hardware) vampire and valeadate are compiled statically.
+
+This requires that the build environment has access to `gcc-musl` as well as a zlib for `musl` (possibly needs to be compiled manually depending on the used distribution).
+
+If the requirements are met (normal build + musl), the script `./createStarExecPackage` should automatically build a suitable file. 
