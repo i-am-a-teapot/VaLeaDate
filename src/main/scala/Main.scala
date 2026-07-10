@@ -377,6 +377,37 @@ object Main {
     }
   }
 
+  private def reportNonRefutedNodes(
+      nodes: Seq[String],
+      results: collection.Map[String, JobScheduler.ProcessResult],
+      nodeLabel: String,
+      pluralLabel: String
+  ): Unit = {
+    val satisfiableNodes = nodes.filter(node =>
+      results(node).stdout.contains("-- Termination reason: Satisfiable")
+    )
+
+    for (node <- nodes) {
+      Logger.println(
+        s"$nodeLabel $node did not produce a refutation. Input was:",
+        verbosity = Logger.VERBOSITY_LOW
+      )
+      Logger.println(results(node).stdin, verbosity = Logger.VERBOSITY_LOW)
+      Logger.println(s"Vampire output was:", verbosity = Logger.VERBOSITY_LOW)
+      Logger.println(results(node).stdout, verbosity = Logger.VERBOSITY_LOW)
+    }
+
+    if (satisfiableNodes.nonEmpty) {
+      throw new ProofErrorException(
+        s"Some $pluralLabel were satisfiable (are unsound): ${satisfiableNodes.mkString(", ")}" 
+      )
+    } else {
+      throw new ProofUnsureException(
+        s"Some $pluralLabel did not produce a refutation (are possibly unsound): ${nodes.mkString(", ")}" 
+      )
+    }
+  }
+
   def runApp(config: Config): Unit = {
     Logger.setVerbose(config.verbosity)
     val stackSizeInBytes = 4 * 1024 * 1024 // 4MB, adjust as needed
@@ -543,62 +574,37 @@ object Main {
 
       val nonRefutedNodes = theoremCheckResults
         .filter { case (_, result) =>
-          !result.stdout.contains("-- Termination reason: Refutation")
+          !(result.stdout.contains("-- Termination reason: Refutation") &&
+            !result.stdout.contains("-- Termination reason: Refutation not found")
+          )
         }
         .keys
         .toSeq
 
       val additionalObligationCheckFailures = additionalObligationCheckResults
         .filter { case (_, result) =>
-          !result.stdout.contains("-- Termination reason: Refutation")
+          !(result.stdout.contains("-- Termination reason: Refutation") &&
+            !result.stdout.contains("-- Termination reason: Refutation not found")
+          )
         }
         .keys
         .toSeq
 
+      
       if (additionalObligationCheckFailures.nonEmpty) {
-        for (node <- additionalObligationCheckFailures) {
-          Logger.println(
-            s"Additional proof obligation node $node did not produce a refutation. Input was:",
-            verbosity = Logger.VERBOSITY_LOW
-          )
-          Logger.println(
-            additionalObligationCheckResults(node).stdin,
-            verbosity = Logger.VERBOSITY_LOW
-          )
-          Logger.println(
-            s"Vampire output was:",
-            verbosity = Logger.VERBOSITY_LOW
-          )
-          Logger.println(
-            additionalObligationCheckResults(node).stdout,
-            verbosity = Logger.VERBOSITY_LOW
-          )
-        }
-        throw new ProofErrorException(
-          s"Some additional proof obligations did not produce a refutation (are possibly unsound): ${additionalObligationCheckFailures.mkString(", ")}"
+        reportNonRefutedNodes(
+          additionalObligationCheckFailures,
+          additionalObligationCheckResults,
+          "Additional proof obligation node",
+          "additional proof obligations"
         )
       }
       if (nonRefutedNodes.nonEmpty) {
-        for (node <- nonRefutedNodes) {
-          Logger.println(
-            s"Theorem node $node did not produce a refutation. Input was:",
-            verbosity = Logger.VERBOSITY_LOW
-          )
-          Logger.println(
-            theoremCheckResults(node).stdin,
-            verbosity = Logger.VERBOSITY_LOW
-          )
-          Logger.println(
-            s"Vampire output was:",
-            verbosity = Logger.VERBOSITY_LOW
-          )
-          Logger.println(
-            theoremCheckResults(node).stdout,
-            verbosity = Logger.VERBOSITY_LOW
-          )
-        }
-        throw new ProofErrorException(
-          s"Some theorem nodes did not produce a refutation (are possibly unsound): ${nonRefutedNodes.mkString(", ")}"
+        reportNonRefutedNodes(
+          nonRefutedNodes,
+          theoremCheckResults,
+          "Theorem node",
+          "theorem nodes"
         )
       }
 

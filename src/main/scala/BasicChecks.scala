@@ -29,7 +29,7 @@ object BasicChecks {
             (hasConjecture && node.role == CONJECTURE) ||
             (!hasConjecture && node.role == NEGATED_CONJECTURE)
           if (!roleIsAllowed) {
-            throw new ProofErrorException(
+            throw new ProofUnsureException(
               s"Source node $source has unexpected role '${node.role}'"
             )
           }
@@ -82,21 +82,6 @@ object BasicChecks {
     })
   }
 
-  def checkAllInferencesHaveParents(dag: ProofDag.Dag): Unit = {
-    var hasConjecture = !dag.conjectures.isEmpty
-    dag.nodes.values
-      .filter(node => node.role != AXIOM && node.role != CONJECTURE)
-      .foreach(node =>
-        if (!hasConjecture && node.role == NEGATED_CONJECTURE) {
-          ()
-        } else if (node.parents.isEmpty) {
-          throw new ProofErrorException(
-            s"Inference node ${node.name} with role '${node.role}' has no parents"
-          )
-        }
-      )
-  }
-
   def checkCTHStatusOnlyOnNegatedConjectures(dag: ProofDag.Dag): Unit = {
     dag.nodes.values
       .filter(node => node.role != NEGATED_CONJECTURE)
@@ -145,7 +130,7 @@ object BasicChecks {
   }
 
   def checkFalseRootReachesAxioms(dag: ProofDag.Dag): Unit = {
-    if(!dag.oneConnectedFalseRoot.isDefined) {
+    if (!dag.oneConnectedFalseRoot.isDefined) {
       throw new ProofErrorException(
         s"No false sink reaches any axiom in the proof DAG"
       )
@@ -227,7 +212,9 @@ object BasicChecks {
       }
 
       if (problemFormula.role != nodeFromProof.role) {
-        if(treatNegatedConjectureAsAxiom && problemFormula.role == NEGATED_CONJECTURE && nodeFromProof.role == AXIOM) {
+        if (
+          treatNegatedConjectureAsAxiom && problemFormula.role == NEGATED_CONJECTURE && nodeFromProof.role == AXIOM
+        ) {
           Logger.println(
             s"Treating negated conjecture ${nodeFromProof.name} as axiom"
           )
@@ -254,20 +241,6 @@ object BasicChecks {
     }
   }
 
-  def checkIfEveryAxiomHasFileParentAnnotation(dag: ProofDag.Dag): Unit = {
-    dag.axioms.foreach(axiom => {
-      val node = dag.nodes(axiom)
-      if (
-        AnnotationInformationHelpers
-          .fileParentInformation(node.additionalInfo)
-          .isEmpty
-      ) {
-        throw new ProofErrorException(
-          s"Axiom node $axiom does not have a file parent annotation"
-        )
-      }
-    })
-  }
 
   def checkESAIsSupported(dag: ProofDag.Dag): Unit = {
     dag.nodes.values
@@ -282,6 +255,30 @@ object BasicChecks {
           )
         }
       })
+  }
+
+  def checkEachNodeHasValidStatus(dag: ProofDag.Dag, assumeThm : Boolean): Unit = {
+    dag.nodes.values.foreach(node => {
+      val status = AnnotationInformationHelpers.getStatuses(node.additionalInfo)
+      if (node.role != AXIOM && node.role != CONJECTURE) {
+        if (status.isEmpty && !assumeThm) {
+          throw new ProofErrorException(
+            s"Node ${node.name} does not have a status annotation"
+          )
+        }
+        var validSet = Set("esa", "cth", "thm")
+        if (assumeThm) {
+          validSet += ""
+        }
+        status.foreach(s => {
+          if (!validSet.contains(s.toLowerCase)) {
+            throw new ProofErrorException(
+              s"Node ${node.name} has an invalid status annotation: $s"
+            )
+          }
+        })
+      }
+    })
   }
 
   def checkSkolemizationStepBasics(dag: ProofDag.Dag): Unit = {
@@ -412,6 +409,27 @@ object BasicChecks {
       })
   }
 
+  def checkIfEveryAxiomHasFileParentAnnotation(dag : ProofDag.Dag, problemFormulas: Seq[TPTP.AnnotatedFormula]): Unit = {
+    val problemFormulaNames = problemFormulas.map(_.name).toSet
+    dag.axioms.foreach(axiom => {
+      val node = dag.nodes(axiom)
+      val fileParentInfoOpt =
+        AnnotationInformationHelpers.fileParentInformation(node.additionalInfo)
+      if (fileParentInfoOpt.isEmpty) {
+        throw new ProofErrorException(
+          s"Axiom node $axiom does not have a file parent annotation"
+        )
+      }
+      val fileParentInfo = fileParentInfoOpt.get
+      if (!problemFormulaNames.contains(fileParentInfo.formulaName)) {
+        throw new ProofErrorException(
+          s"Axiom node $axiom has a file parent annotation with formula name '${fileParentInfo.formulaName}' that does not exist in the input problem"
+        )
+      }
+    })
+  }
+  
+
   def performAllBasicChecks(
       dag: ProofDag.Dag,
       problemFormulas: Seq[TPTP.AnnotatedFormula],
@@ -429,8 +447,6 @@ object BasicChecks {
     checkAllNegatedConjecturesAreCTH(dag)
     Logger.println("Checking negated conjectures have conjecture parents...")
     checkAllNegatedConjectureHaveConjectureParent(dag)
-    Logger.println("Checking all inferences have parents...")
-    // checkAllInferencesHaveParents(dag)
     Logger.println("Checking CTH status only on negated conjectures...")
     checkCTHStatusOnlyOnNegatedConjectures(dag)
     Logger.println("Checking connected sinks have false...")
@@ -438,16 +454,23 @@ object BasicChecks {
     Logger.println("Checking conjecture is not used as premise...")
     checkConjectureIsNotUsedAsPremise(dag)
     Logger.println("Checking if every axiom has a file parent annotation...")
-    checkIfEveryAxiomHasFileParentAnnotation(dag)
+    checkIfEveryAxiomHasFileParentAnnotation(dag, problemFormulas)
     Logger.println("Smoke testing skolemization steps ...")
     checkSkolemizationStepBasics(dag)
     Logger.println("Checking if every ESA step is supported...")
     checkESAIsSupported(dag)
     Logger.println("Checking if false root reaches axioms...")
     checkFalseRootReachesAxioms(dag)
+    Logger.println("Checking if each node has valid status...")
+    checkEachNodeHasValidStatus(dag, assumeTheorems)
+
     Logger.println("Checking alpha-equivalence of problem formulas...")
     if (!allowAxiomMismatch) {
-      checkInputProblemIsSameAsProof(dag, problemFormulas, treatNegatedConjectureAsAxiom)
+      checkInputProblemIsSameAsProof(
+        dag,
+        problemFormulas,
+        treatNegatedConjectureAsAxiom
+      )
     }
   }
 

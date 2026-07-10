@@ -206,7 +206,7 @@ object SkolemizationGeneration {
               )
               if (args.size != boundVariables.size) {
                 throw new ProofErrorException(
-                  s"node ${node.name}: Skolem function $sym is defined with inconsistent arities in the proof DAG ${args.size} vs ${boundVariables.size}"
+                  s"node ${node.name}: Skolem function $sym is defined with inconsistent arities in the proof annotation: ${args.size} vs formula ${boundVariables.size}"
                 )
               }
               Logger.println(

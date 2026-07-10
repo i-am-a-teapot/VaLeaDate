@@ -70,12 +70,15 @@ set_option maxRecDepth 100000000""")
               node.additionalInfo
             )
           val parents = node.parents.map(parentName => proof.nodes(parentName))
+          //These checks actually happened before, but no problem if we check again here, in the future a 
+          //transormation to a better internal representation of formulas and info should fix this.
           if (parents.size != 1) {
             throw new ProofErrorException(
               s"Expected exactly one parent for skolemization step $nodeName, found ${parents.size}"
             )
           }
           val parent = parents.head
+          
           val parentFormula = parent.formula.formula match {
             case TPTP.FOF.Logical(formula) => formula
             case _                         =>

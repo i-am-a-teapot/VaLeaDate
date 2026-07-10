@@ -81,7 +81,7 @@ final object AnnotationInformationHelpers {
       if (statuses.isEmpty) {
         return true
       }
-      return statuses.forall(stat => stat == "thm" || stat == "unknown")
+      return statuses.forall(stat => stat == "thm" || stat == "")
     }
     return statuses.forall(_ == "thm")
   }
@@ -163,7 +163,7 @@ final object AnnotationInformationHelpers {
     val skolemizationDetails = skolemizeAnnotations.head.additionalInfo
     if (skolemizationDetails.length != 1) {
       throw new ProofErrorException(
-        s"Expected exactly one skolemization details, found ${skolemizationDetails.length}"
+        s"Expected exactly one skolemization detail, found ${skolemizationDetails.length}"
       )
     }
     val details = skolemizationDetails.head match {
@@ -191,7 +191,7 @@ final object AnnotationInformationHelpers {
               inferenceStatus(metaFunctionData)
             }
             .headOption
-            .getOrElse("unknown")
+            .getOrElse("")
           val rule = args(0).data.toSeq
             .flatMap {
               case MetaFunctionData(f, args) => {
@@ -293,18 +293,18 @@ final object AnnotationInformationHelpers {
     val newSymbolInformation = newSymbolTerm match {
       case MetaFunctionData(f, args) => {
         if (f != "new_symbols") {
-          throw new ProofErrorException(s"Expected new_symbols term, found $f")
+          throw new ProofErrorException(s"Expected new_symbols, found $f")
         }
         if (args.size < 2) {
           throw new ProofErrorException(
-            s"Expected new_symbols term to have at least 2 arguments, found ${args.size}"
+            s"Expected new_symbols to have at least 2 arguments, found ${args.size}"
           )
         }
         val typeOfNewSymobls = args(0).data match {
           case Seq(TPTP.MetaFunctionData(typeName, Seq())) => typeName
           case _                                           =>
             throw new ProofUnsureException(
-              s"Expected new_symbols term to have a type as the first argument, found ${args(0).pretty}"
+              s"Expected new_symbols term to have a symbol 'type' as the first argument, found ${args(0).pretty}"
             )
         }
         Logger.println(

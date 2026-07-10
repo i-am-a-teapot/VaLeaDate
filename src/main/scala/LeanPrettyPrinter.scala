@@ -24,6 +24,12 @@ object LeanPrettyPrinter {
       s"(${prettyLeanFOFQuantifier(q)} ${variables.map(prettyLeanUntypedVariable).mkString(" ")}, ${prettyLeanFOFFormula(body)})"
     case TPTP.FOF.UnaryFormula(connective, body) =>
       s"${prettyLeanFOFUnary(connective)} ${prettyLeanFOFFormula(body)}"
+    case TPTP.FOF.BinaryFormula(TPTP.FOF.<~>, left, right) =>
+      s"(${prettyLeanFOFBinary(TPTP.FOF.<~>)} ${prettyLeanFOFFormula(left)} ${prettyLeanFOFFormula(right)})"
+    case TPTP.FOF.BinaryFormula(TPTP.FOF.~&, left, right) =>
+      s"¬(${prettyLeanFOFFormula(left)} ${prettyLeanFOFBinary(TPTP.FOF.~&)} ${prettyLeanFOFFormula(right)})"
+    case TPTP.FOF.BinaryFormula(TPTP.FOF.~|, left, right) =>
+      s"¬(${prettyLeanFOFFormula(left)} ${prettyLeanFOFBinary(TPTP.FOF.~|)} ${prettyLeanFOFFormula(right)})"
     case TPTP.FOF.BinaryFormula(connective, left, right) =>
       s"(${prettyLeanFOFFormula(left)} ${prettyLeanFOFBinary(connective)} ${prettyLeanFOFFormula(right)})"
     case TPTP.FOF.Equality(left, right) =>
@@ -96,10 +102,6 @@ object LeanPrettyPrinter {
   private def prettyLeanFOFUnary(connective: TPTP.FOF.UnaryConnective): String =
     connective match {
       case TPTP.FOF.~ => "¬"
-      case _          =>
-        throw new ProofUnsureException(
-          s"Unsupported unary connective in FOF: $connective"
-        )
     }
 
   private def prettyLeanFOFBinary(
@@ -110,10 +112,9 @@ object LeanPrettyPrinter {
     case TPTP.FOF.<=   => "←"
     case TPTP.FOF.|    => "∨"
     case TPTP.FOF.&    => "∧"
-    case _             =>
-      throw new ProofUnsureException(
-        s"Unsupported binary connective in FOF: $connective"
-      )
+    case TPTP.FOF.<~> => "Xor'"
+    case TPTP.FOF.~|   => "∨"
+    case TPTP.FOF.~&   => "∧"
   }
 
   private def prettyLeanApp(name: String, args: Seq[String]): String = {
