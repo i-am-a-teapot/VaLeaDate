@@ -302,6 +302,7 @@ object BasicChecks {
           )
         }
 
+        
         var referencedVariablesFromParents: Set[String] = Set.empty
         var referencedVariablesInSkolemSymbols: Set[String] = Set.empty
         for ((variable, function, args) <- details.skolemDefinitions) {
@@ -360,6 +361,8 @@ object BasicChecks {
               s"Skolemization step ${node.name} does not have a parent"
             )
         }
+
+        AnnotatedFormulaHelpers.collectVariablesAndCheckIfUnique(fofParent)
 
         if (!AnnotatedFormulaHelpers.checkFormulaIsInNNF(fofParent)) {
           fofParent = AnnotatedFormulaHelpers.transformFormulaToNNF(fofParent)

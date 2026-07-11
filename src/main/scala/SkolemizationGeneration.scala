@@ -29,15 +29,16 @@ object SkolemizationGeneration {
     }
     val previousState = LeanPrettyPrinter.variablesAsTemplates
     LeanPrettyPrinter.variablesAsTemplates = true
-    writer.println(s"  conv at step_$stepName =>")
+    writer.println(s"  have step_${stepName}_Transl' := step_$stepName")
+    writer.println(s"  conv at step_${stepName}_Transl' =>")
     writer.println(
       s"    pattern " + LeanPrettyPrinter.prettyLeanFOFFormula(
         foundVariable.get
       )
     )
     writer.println(s"    rw [← exists'_eq_exists]")
-    writer.println(s"  existspr_prenex at step_$stepName")
-    writer.println(s"  simp only [exists'_eq_exists] at step_$stepName")
+    writer.println(s"  existspr_prenex at step_${stepName}_Transl'")
+    writer.println(s"  simp only [exists'_eq_exists] at step_${stepName}_Transl'")
 
     var switchedOrders = false
     if (skolemFunctionArguments != boundVariables.toSeq) {
@@ -52,11 +53,11 @@ object SkolemizationGeneration {
     }
     if(!switchedOrders){
       writer.println(
-        s"  let ⟨${renderSkolemFunctionName(skolemFunctionName)}, step_$resultStepName'⟩ := step_$stepName"
+        s"  let ⟨${renderSkolemFunctionName(skolemFunctionName)}, step_$resultStepName'⟩ := step_${stepName}_Transl'"
       )
     } else {
       writer.println(
-        s"  let ⟨${renderSkolemFunctionName(skolemFunctionName)}', step_$resultStepName'⟩ := step_$stepName"
+        s"  let ⟨${renderSkolemFunctionName(skolemFunctionName)}', step_$resultStepName'⟩ := step_${stepName}_Transl'"
       )
       writer.println(
         s"  let ${renderSkolemFunctionName(skolemFunctionName)} := fun ${skolemFunctionArguments.mkString(" ")} => ${renderSkolemFunctionName(skolemFunctionName)}' ${boundVariables.mkString(" ")}"
@@ -66,7 +67,7 @@ object SkolemizationGeneration {
     writer.println(
       s"  have step_$resultStepName : ${LeanPrettyPrinter.prettyLeanFOFFormula(outputFormula)} := by (first | exact step_$resultStepName' | clearExcept step_$resultStepName'; simp_all | clearExcept step_$resultStepName'; grind only)"
     )
-  }
+  } 
   
   def findBoundVariablesUpToExistential(
       formula: FOF.Formula,

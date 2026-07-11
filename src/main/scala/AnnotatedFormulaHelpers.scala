@@ -59,9 +59,10 @@ object AnnotatedFormulaHelpers {
   ): Set[String] = {
     formula match {
       case TPTP.FOF.AtomicFormula(_, args)                    => Set.empty
-      case TPTP.FOF.QuantifiedFormula(quant, variables, body) =>
+      case TPTP.FOF.QuantifiedFormula(quant, variables, body) => {
         (if (quant == quantifier) variables.toSet
          else Set.empty) ++ collectQuantifiedFormulaVariables(body, quantifier)
+      }
       case TPTP.FOF.UnaryFormula(_, body) =>
         collectQuantifiedFormulaVariables(body, quantifier)
       case TPTP.FOF.BinaryFormula(_, left, right) =>
@@ -73,6 +74,46 @@ object AnnotatedFormulaHelpers {
       case TPTP.FOF.Inequality(left, right) => Set.empty
     }
   }
+
+  def collectVariablesAndCheckIfUnique(
+      formula: TPTP.FOF.Formula,
+  ): Set[String] = {
+    formula match {
+      case TPTP.FOF.AtomicFormula(_, args)                    => Set.empty
+      case TPTP.FOF.QuantifiedFormula(quant, variables, body) => {
+        var varSet = variables.toSet
+        if (varSet.size != variables.size) {
+          throw new ProofErrorException(
+            s"Duplicate variable found in quantifier: ${formula.pretty}"
+          )
+        }
+        var combined = varSet ++ collectVariablesAndCheckIfUnique(body)
+        if (combined.size != varSet.size + collectVariablesAndCheckIfUnique(body).size) {
+          throw new ProofErrorException(
+            s"Duplicate variable found in formula ${formula.pretty}"
+          )
+        }
+        combined
+      }
+      case TPTP.FOF.UnaryFormula(_, body) =>
+        collectVariablesAndCheckIfUnique(body)
+      case TPTP.FOF.BinaryFormula(_, left, right) => {
+        var leftVars = collectVariablesAndCheckIfUnique(left)
+        var rightVars = collectVariablesAndCheckIfUnique(right)
+        var combined = leftVars ++ rightVars
+        if (combined.size != leftVars.size + rightVars.size) {
+          throw new ProofErrorException(
+            s"Duplicate variable found in formula ${formula.pretty}"
+          )
+        } else {
+          return combined
+        }
+      }
+      case TPTP.FOF.Equality(left, right)   => Set.empty
+      case TPTP.FOF.Inequality(left, right) => Set.empty
+    }
+  }
+
 
   def checkFormulaIsInNNF(formula: TPTP.FOF.Formula): Boolean = {
     formula match {
@@ -259,4 +300,7 @@ object AnnotatedFormulaHelpers {
         )
     }
   }
+
+  
+   
 }

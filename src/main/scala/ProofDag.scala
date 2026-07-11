@@ -333,12 +333,12 @@ object ProofDag {
 
   private def stepRole(step: TPTP.AnnotatedFormula): Option[String] =
     step match {
-      case TPTP.THFAnnotated(_, role, _, _) => Some(role)
-      case TPTP.TFFAnnotated(_, role, _, _) => Some(role)
-      case TPTP.FOFAnnotated(_, role, _, _) => Some(role)
-      case TPTP.TCFAnnotated(_, role, _, _) => Some(role)
-      case TPTP.CNFAnnotated(_, role, _, _) => Some(role)
-      case TPTP.TPIAnnotated(_, role, _, _) => Some(role)
+      case TPTP.THFAnnotated(_, role, _, _) => Some(role.toLowerCase())
+      case TPTP.TFFAnnotated(_, role, _, _) => Some(role.toLowerCase())
+      case TPTP.FOFAnnotated(_, role, _, _) => Some(role.toLowerCase())
+      case TPTP.TCFAnnotated(_, role, _, _) => Some(role.toLowerCase())
+      case TPTP.CNFAnnotated(_, role, _, _) => Some(role.toLowerCase())
+      case TPTP.TPIAnnotated(_, role, _, _) => Some(role.toLowerCase())
     }
 
   private def truncate(s: String, n: Int): String = {

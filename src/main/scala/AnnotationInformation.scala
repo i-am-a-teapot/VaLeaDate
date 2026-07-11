@@ -101,7 +101,7 @@ final object AnnotationInformationHelpers {
           case NamedParentInformation(_) => Seq.empty
           case UnnamedInformation(inf)   => getStatuses(inf)
         }
-        status +: parentStatuses
+        status.toLowerCase +: parentStatuses
       }
       case _ => Seq.empty
     }
