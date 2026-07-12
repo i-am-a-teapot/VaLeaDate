@@ -1,8 +1,9 @@
 #!/bin/bash
 
-export VAMPLEAN_PATH=$(pwd)/../vamplean/.lake/build/lib/lean/
-export VAMPIRE_BINARY=$(pwd)/./vampire
-export LEAN_BINARY=$(pwd)/../requirements/elan/toolchains/leanprover--lean4---v4.31.0/bin/lean
+parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+export VAMPLEAN_PATH=$parent_path/../vamplean/.lake/build/lib/lean/
+export VAMPIRE_BINARY=$parent_path/./vampire
+export LEAN_BINARY=$parent_path/../requirements/elan/toolchains/leanprover--lean4---v4.31.0/bin/lean
 
 TIMELIMIT_OPTION="-t 30"
 # check if $STAREXEC_WALLCLOCK_LIMIT is set and if so, include -t option with the value of $STAREXEC_WALLCLOCK_LIMIT
