@@ -217,7 +217,6 @@ object ProofRewriter {
           None
         )
       )
-
       val newObligation = TPTPProblemGenerator.Inference(
         "rev_obligation_nnf_" + node.name,
         Seq(rewrittenParent.formula),
@@ -249,7 +248,8 @@ object ProofRewriter {
         parentFormula,
         skolemizedVariable,
         skolemizedFunName,
-        skolemizedFunVars
+        skolemizedFunVars,
+        true
       )
 
     Logger.println(s"excluding $skolemizedFunName from alpha equivalence check")

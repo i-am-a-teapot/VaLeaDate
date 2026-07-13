@@ -110,14 +110,22 @@ object SkolemizationGeneration {
     }
   }
 
-  def skolemizeFormulaWithSingleVariable(formula: TPTP.FOF.Formula, skolemizedVariable: String, skolemFunctionName: String, dependentVariables: Seq[String]): TPTP.FOF.Formula = {
+  def skolemizeFormulaWithSingleVariable(formula: TPTP.FOF.Formula, skolemizedVariable: String, skolemFunctionName: String, dependentVariables: Seq[String], skolemizeWithGivenVars: Boolean): TPTP.FOF.Formula = {
     
     val (boundVars, exists) = findBoundVariablesUpToExistential(formula, skolemizedVariable)
     Logger.println(s"Found bound variables for skolemization: ${boundVars.mkString(", ")}")
-    val skolemFunction = TPTP.FOF.AtomicTerm(
-      skolemFunctionName,
-      boundVars.toSeq.map(v => TPTP.FOF.Variable(v))
-    )
+    
+    val skolemFunction = if(skolemizeWithGivenVars) {
+      TPTP.FOF.AtomicTerm(
+        skolemFunctionName,
+        dependentVariables.toSeq.map(v => TPTP.FOF.Variable(v))
+      )
+    } else {
+      TPTP.FOF.AtomicTerm(
+        skolemFunctionName,
+        boundVars.toSeq.map(v => TPTP.FOF.Variable(v))
+      )
+    }
     val skolemFormula = replaceVarWithTermAndDelQuant(formula, skolemizedVariable, skolemFunction)
     skolemFormula
   }
