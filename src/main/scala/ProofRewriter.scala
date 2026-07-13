@@ -165,7 +165,8 @@ object ProofRewriter {
   def rewriteSkolemizationInferencesIfNotEqToSkol(
       dag: ProofDag.Dag,
       nodeName: String
-  ): (ProofDag.Dag, Map[String, String]) = {
+  ): (ProofDag.Dag, Map[String, String], Seq[TPTPProblemGenerator.Inference]) = {
+    var additionalObligations = Seq.empty[TPTPProblemGenerator.Inference]
     var newNameForSkolemNodeMap: Map[String, String] = Map.empty
     // First add a skolemization transformation step to nnf, then skolemize the nnf and add the skolemization step to the dag
     var currentDag = dag
@@ -216,6 +217,13 @@ object ProofRewriter {
           None
         )
       )
+
+      val newObligation = TPTPProblemGenerator.Inference(
+        "rev_obligation_nnf_" + node.name,
+        Seq(rewrittenParent.formula),
+        newParentNode.formula
+      )
+      additionalObligations = additionalObligations :+ newObligation
       var updatedNodes = currentDag.nodes
       updatedNodes = updatedNodes.updated(parentName, rewrittenParent)
       updatedNodes = updatedNodes + (preTransformNodeName -> newParentNode)
@@ -272,14 +280,22 @@ object ProofRewriter {
           None
         )
       )
+      //Add check in the reverse direction as well: from rewrittenNode to newSkolemizationNode
+      val newObligation = TPTPProblemGenerator.Inference(
+        "rev_obligation_skolem_" + node.name,
+        Seq(rewrittenNode.formula),
+        newSkolemizationNode.formula
+      )
+
       var updatedNodes = currentDag.nodes
       updatedNodes = updatedNodes.updated(nodeName, rewrittenNode)
       updatedNodes = updatedNodes + (newParentName -> newSkolemizationNode)
       newNameForSkolemNodeMap =
         newNameForSkolemNodeMap ++ Map(nodeName -> newParentName)
+      additionalObligations = additionalObligations :+ newObligation
       currentDag = ProofDag.Dag(updatedNodes)
     }
-    return (currentDag, newNameForSkolemNodeMap)
+    return (currentDag, newNameForSkolemNodeMap, additionalObligations)
   }
 
   def addInferencesIfSyntacticMismatch(
@@ -322,12 +338,13 @@ object ProofRewriter {
         .keys
     ) {
 
-      val (newDag, nodeNameMap) = rewriteSkolemizationInferencesIfNotEqToSkol(
+      val (newDag, nodeNameMap, newObligations) = rewriteSkolemizationInferencesIfNotEqToSkol(
         currentDag,
         newNodeNameMap.getOrElse(nodeName, nodeName)
       )
       currentDag = newDag;
       newNodeNameMap = newNodeNameMap ++ nodeNameMap
+      obligations = obligations ++ newObligations
     }
     (currentDag, obligations)
   }
