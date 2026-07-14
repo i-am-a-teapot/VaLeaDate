@@ -197,7 +197,7 @@ object Main {
           watcher.schedule(
             new TimerTask {
               def run(): Unit = {
-                println("%SZS status: Timeout")
+                println("% SZS status: Timeout")
                 killChildProcesses()
                 System.exit(1)
               }
@@ -709,16 +709,16 @@ object Main {
           LeanRunner.checkLeanResult(leanCheckResult)
         }
       }
-      println(s"%SZS status VerifiedGood")
+      println(s"% SZS status VerifiedGood")
     } catch {
       case e: ProofErrorException =>
-        println(s"%SZS status VerifiedBad : ${e.getMessage}")
+        println(s"% SZS status VerifiedBad : ${e.getMessage}")
       case e: ProofUnsureException =>
-        println(s"%SZS status Unknown : ${e.getMessage}")
+        println(s"% SZS status Unknown : ${e.getMessage}")
       case e: IllegalArgumentException =>
-        println(s"%SZS status Unknown : Usage error: ${e.getMessage}")
+        println(s"% SZS status Unknown : Usage error: ${e.getMessage}")
       case e: Exception =>
-        println(s"%SZS status Unknown : ${e.getMessage}")
+        println(s"% SZS status Unknown : ${e.getMessage}")
     } finally {
       Logger.println(
         "Shutting down execution context and killing child processes..."
